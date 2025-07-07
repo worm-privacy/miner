@@ -1,6 +1,8 @@
 mod fp;
 mod poseidon2;
 
+use std::process::Command;
+
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
 use ff::{Field, PrimeField};
@@ -14,6 +16,14 @@ struct BurnOpt {
     rpc: reqwest::Url,
     #[structopt(long)]
     private_key: PrivateKeySigner,
+    #[structopt(long)]
+    amount: String,
+    #[structopt(long, default_value = "0")]
+    fee: String,
+    #[structopt(long, default_value = "0")]
+    spend: String,
+    #[structopt(long)]
+    receiver: Address,
 }
 
 #[derive(StructOpt)]
@@ -24,8 +34,12 @@ enum MinerOpt {
 
 use alloy::{
     eips::BlockId,
+    hex::ToHexExt,
     network::TransactionBuilder,
-    primitives::{Address, U256, address, keccak256},
+    primitives::{
+        Address, B256, U256, keccak256,
+        utils::{format_ether, parse_ether},
+    },
     providers::{Provider, ProviderBuilder},
     rlp::RlpDecodable,
     rpc::types::{EIP1186AccountProofResponse, TransactionRequest},
@@ -125,22 +139,37 @@ fn input_file(
 }
 
 use alloy::rlp::Encodable;
+use tempfile::tempdir;
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let opt = MinerOpt::from_args();
 
     match opt {
         MinerOpt::Burn(burn_opt) => {
+            let fee = parse_ether(&burn_opt.fee)?;
+            let spend = parse_ether(&burn_opt.spend)?;
+            let amount = parse_ether(&burn_opt.amount)?;
+
+            if fee + spend > amount {
+                return Err(anyhow!("Sum of --fee and --spend should be less than --amount!"));
+            }
+
             let provider = ProviderBuilder::new()
                 .wallet(burn_opt.private_key)
                 .connect_http(burn_opt.rpc);
-            //println!("Generating a burn-key...");
-            let burn_key = find_burn_key(2);
-            let fee = U256::from(123);
-            let spend = U256::from(234);
-            let receiver = address!("0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1");
-            let burn_addr = generate_burn_address(burn_key, receiver);
-            let amount = U256::from(10).pow(U256::from(18));
+            println!("Generating a burn-key...");
+            let burn_key = find_burn_key(3);
+            
+            let burn_addr = generate_burn_address(burn_key, burn_opt.receiver);
+
+            println!(
+                "Your burn-key: {}",
+                B256::from(U256::from_le_bytes(burn_key.to_repr().0)).encode_hex()
+            );
+            println!("Your burn-address is: {}", burn_addr);
+            
+
             // Build a transaction to send 100 wei from Alice to Bob.
             // The `from` field is automatically filled to the first signer's address (Alice).
             let tx = TransactionRequest::default()
@@ -154,7 +183,17 @@ async fn main() -> Result<(), anyhow::Error> {
 
             // Send the transaction and wait for the broadcast.
             let pending_tx = provider.send_transaction(tx).await?;
+            let tx_hash = pending_tx.tx_hash().encode_hex();
             let receipt = pending_tx.get_receipt().await?;
+            if receipt.status() {
+                println!(
+                    "Successfully burnt {} ETH! Tx-hash: {}",
+                    format_ether(amount),
+                    tx_hash
+                );
+            } else {
+                println!("Burn failed! Tx-hash: {}", tx_hash);
+            }
 
             let block = provider
                 .get_block(BlockId::latest())
@@ -163,12 +202,29 @@ async fn main() -> Result<(), anyhow::Error> {
             let mut header_bytes = Vec::new();
             block.header.inner.encode(&mut header_bytes);
             let proof = provider.get_proof(burn_addr, vec![]).await?;
+
+            let proof_dir = tempdir()?;
+            let input_json_path = proof_dir.path().join("input.json");
+            let witness_path = proof_dir.path().join("witness.wtns");
+
             println!(
-                "{}",
-                input_file(proof, header_bytes, burn_key, fee, spend, receiver)?.to_string()
+                "Generating input.json file at: {}",
+                input_json_path.display()
             );
-            //println!("Send funds to this burn address: {}", burn_addr);
-            //println!("Hello, world!");
+            std::fs::write(
+                &input_json_path,
+                input_file(proof, header_bytes, burn_key, fee, spend, burn_opt.receiver)?.to_string(),
+            )?;
+
+            println!(
+                "Generating witness.wtns file at: {}",
+                witness_path.display()
+            );
+            let _output = Command::new("./main_proof_of_burn")
+                .current_dir("main_proof_of_burn_cpp")
+                .arg(&input_json_path)
+                .arg(&witness_path)
+                .output()?;
         }
         MinerOpt::Mine => {}
     }
