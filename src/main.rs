@@ -1,18 +1,17 @@
 mod fp;
 mod poseidon2;
-use std::process::exit;
 
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
-use ff::{Field, PrimeField, derive::rand_core};
-use fp::{Fp, FpRepr};
+use ff::{Field, PrimeField};
+use fp::Fp;
 use serde_json::json;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
 struct BurnOpt {
-    #[structopt(long, default_value = "https://eth.meowrpc.com")]
-    rpc: String,
+    #[structopt(long, default_value = "http://127.0.0.1:8545")]
+    rpc: reqwest::Url,
     #[structopt(long)]
     private_key: PrivateKeySigner,
 }
@@ -25,13 +24,13 @@ enum MinerOpt {
 
 use alloy::{
     eips::BlockId,
-    hex::ToHexExt,
-    network::{Ethereum, TransactionBuilder},
-    primitives::{Address, FixedBytes, U160, U256, address, keccak256},
-    providers::{Provider, ProviderBuilder, RootProvider},
-    rlp::{RlpDecodable, RlpEncodable},
+    network::TransactionBuilder,
+    primitives::{Address, U256, address, keccak256},
+    providers::{Provider, ProviderBuilder},
+    rlp::RlpDecodable,
     rpc::types::{EIP1186AccountProofResponse, TransactionRequest},
-    signers::{k256::ecdsa::SigningKey, local::PrivateKeySigner},
+    signers::local::PrivateKeySigner,
+    transports::http::reqwest,
 };
 
 fn find_burn_key(pow_min_zero_bytes: usize) -> Fp {
@@ -134,7 +133,7 @@ async fn main() -> Result<(), anyhow::Error> {
         MinerOpt::Burn(burn_opt) => {
             let provider = ProviderBuilder::new()
                 .wallet(burn_opt.private_key)
-                .connect_http("http://127.0.0.1:8545".parse()?);
+                .connect_http(burn_opt.rpc);
             //println!("Generating a burn-key...");
             let burn_key = find_burn_key(2);
             let fee = U256::from(123);
