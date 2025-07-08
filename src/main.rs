@@ -66,14 +66,6 @@ fn generate_burn_address(burn_key: Fp, receiver: Address) -> Address {
     Address::from_slice(&hash_be)
 }
 
-fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
-    bytes
-        .iter()
-        .map(|b| (0..8).into_iter().map(move |i| ((b & (1 << i)) != 0) as u8))
-        .flatten()
-        .collect()
-}
-
 #[derive(Debug, RlpDecodable, PartialEq)]
 struct RlpLeaf {
     key: alloy::rlp::Bytes,
@@ -109,15 +101,15 @@ fn input_file(
     for layer in proof.account_proof.iter() {
         let mut extended_layer = layer.to_vec();
         extended_layer.resize(max_layer_len, 0);
-        layers.push(bytes_to_bits(&extended_layer));
+        layers.push(extended_layer);
     }
     while layers.len() < max_layers {
-        layers.push(vec![0; max_layer_len * 8]);
+        layers.push(vec![0; max_layer_len]);
     }
     let mut layer_bits_lens = proof
         .account_proof
         .iter()
-        .map(|l| l.len() * 8)
+        .map(|l| l.len())
         .collect::<Vec<_>>();
     layer_bits_lens.resize(max_layers, 0);
     let mut extended_header = header_bytes.to_vec();
@@ -126,10 +118,10 @@ fn input_file(
     Ok(json!({
         "balance": proof.balance.to_string(),
         "numLayers": proof.account_proof.len(),
-        "layerBitsLens": layer_bits_lens,
-        "layerBits": layers,
-        "blockHeader": bytes_to_bits(&extended_header),
-        "blockHeaderLen": header_bytes.len() * 8,
+        "layerLens": layer_bits_lens,
+        "layers": layers,
+        "blockHeader": extended_header,
+        "blockHeaderLen": header_bytes.len(),
         "receiverAddress": U256::from_be_slice(receiver.as_slice()).to_string(),
         "numLeafAddressNibbles": num_addr_hash_nibbles.to_string(),
         "burnKey": U256::from_le_bytes(burn_key.to_repr().0).to_string(),
@@ -152,7 +144,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let amount = parse_ether(&burn_opt.amount)?;
 
             if fee + spend > amount {
-                return Err(anyhow!("Sum of --fee and --spend should be less than --amount!"));
+                return Err(anyhow!(
+                    "Sum of --fee and --spend should be less than --amount!"
+                ));
             }
 
             let provider = ProviderBuilder::new()
@@ -160,7 +154,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .connect_http(burn_opt.rpc);
             println!("Generating a burn-key...");
             let burn_key = find_burn_key(3);
-            
+
             let burn_addr = generate_burn_address(burn_key, burn_opt.receiver);
 
             println!(
@@ -168,7 +162,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 B256::from(U256::from_le_bytes(burn_key.to_repr().0)).encode_hex()
             );
             println!("Your burn-address is: {}", burn_addr);
-            
 
             // Build a transaction to send 100 wei from Alice to Bob.
             // The `from` field is automatically filled to the first signer's address (Alice).
@@ -213,7 +206,8 @@ async fn main() -> Result<(), anyhow::Error> {
             );
             std::fs::write(
                 &input_json_path,
-                input_file(proof, header_bytes, burn_key, fee, spend, burn_opt.receiver)?.to_string(),
+                input_file(proof, header_bytes, burn_key, fee, spend, burn_opt.receiver)?
+                    .to_string(),
             )?;
 
             println!(
