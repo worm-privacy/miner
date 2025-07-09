@@ -50,7 +50,10 @@ use alloy::{
 fn find_burn_key(pow_min_zero_bytes: usize) -> Fp {
     let mut curr: U256 = U256::from_le_bytes(Fp::random(ff::derive::rand_core::OsRng).to_repr().0);
     loop {
-        let hash: U256 = keccak256(curr.to_be_bytes::<32>()).into();
+        let mut inp: [u8; 40] = [0; 40];
+        inp[..32].copy_from_slice(&curr.to_be_bytes::<32>());
+        inp[32..].copy_from_slice(b"EIP-7503");
+        let hash: U256 = keccak256(inp).into();
         if hash.leading_zeros() >= pow_min_zero_bytes * 8 {
             return Fp::from_be_bytes(&curr.to_be_bytes::<32>());
         }
