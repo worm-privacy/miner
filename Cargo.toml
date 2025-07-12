@@ -8,6 +8,7 @@ alloy = { version = "1.0.17", features = ["getrandom", "rlp"] }
 alloy-rlp = "0.3.12"
 anyhow = "1.0.98"
 ff = { version = "0.13.1", features = ["derive"] }
+homedir = "0.3.5"
 lazy_static = "1.5.0"
 num-bigint = "0.4.6"
 num-traits = "0.2.19"

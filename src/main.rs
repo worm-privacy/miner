@@ -182,6 +182,9 @@ use tempfile::tempdir;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let opt = MinerOpt::from_args();
+    let params_dir = homedir::my_home()?
+        .ok_or(anyhow!("Can't find user's home directory!"))?
+        .join(".worm-miner");
 
     match opt {
         MinerOpt::Rapidsnark { zkey, witness } => {
@@ -303,7 +306,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .arg("--input")
                 .arg(input_json_path)
                 .arg("--dat")
-                .arg("proof_of_burn.dat")
+                .arg(params_dir.join("proof_of_burn.dat"))
                 .arg("--witness")
                 .arg(witness_path)
                 .output()?;
@@ -313,14 +316,14 @@ async fn main() -> Result<(), anyhow::Error> {
                 &Command::new(&proc_path)
                     .arg("rapidsnark")
                     .arg("--zkey")
-                    .arg("groth16_pkey.zkey")
+                    .arg(params_dir.join("proof_of_burn.zkey"))
                     .arg("--witness")
                     .arg(witness_path)
                     .output()?
                     .stdout,
             )?;
 
-            println!("{:?}", output);
+            println!("Generated proof successfully! {:?}", output);
         }
         MinerOpt::Mine => {}
     }
