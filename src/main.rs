@@ -1,14 +1,19 @@
 mod fp;
 mod poseidon2;
 
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
 use ff::{Field, PrimeField};
-use fp::Fp;
+use fp::{Fp, FpRepr};
+use poseidon2::poseidon2;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use structopt::StructOpt;
+use worm_witness_gens::{
+    generate_proof_of_burn_witness_file, generate_spend_witness_file, rapidsnark,
+};
 
 #[derive(StructOpt)]
 struct BurnOpt {
@@ -27,7 +32,30 @@ struct BurnOpt {
 }
 
 #[derive(StructOpt)]
+struct GenerateWitnessProofOfBurnOpt {
+    #[structopt(long)]
+    dat: PathBuf,
+    #[structopt(long)]
+    input: PathBuf,
+    #[structopt(long)]
+    witness: PathBuf,
+}
+
+#[derive(StructOpt)]
+enum GenerateWitnessOpt {
+    Spend,
+    ProofOfBurn(GenerateWitnessProofOfBurnOpt),
+}
+
+#[derive(StructOpt)]
 enum MinerOpt {
+    Rapidsnark {
+        #[structopt(long)]
+        zkey: PathBuf,
+        #[structopt(long)]
+        witness: PathBuf,
+    },
+    GenerateWitness(GenerateWitnessOpt),
     Burn(BurnOpt),
     Mine,
 }
@@ -69,6 +97,20 @@ fn generate_burn_address(burn_key: Fp, receiver: Address) -> Address {
     Address::from_slice(&hash_be)
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct RapidsnarkProof {
+    pi_a: [U256; 3],
+    pi_b: [[U256; 2]; 3],
+    pi_c: [U256; 3],
+    protocol: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct RapidsnarkOutput {
+    proof: RapidsnarkProof,
+    public: Vec<U256>,
+}
+
 #[derive(Debug, RlpDecodable, PartialEq)]
 struct RlpLeaf {
     key: alloy::rlp::Bytes,
@@ -83,9 +125,9 @@ fn input_file(
     spend: U256,
     receiver: Address,
 ) -> Result<serde_json::Value, anyhow::Error> {
-    let max_layers = 4;
+    let max_layers = 16;
     let max_layer_len = 4 * 136;
-    let max_header_len = 5 * 136;
+    let max_header_len = 8 * 136;
 
     let leaf = proof
         .account_proof
@@ -114,7 +156,7 @@ fn input_file(
         .iter()
         .map(|l| l.len())
         .collect::<Vec<_>>();
-    layer_bits_lens.resize(max_layers, 0);
+    layer_bits_lens.resize(max_layers, 32);
     let mut extended_header = header_bytes.to_vec();
     extended_header.resize(max_header_len, 0);
 
@@ -130,6 +172,7 @@ fn input_file(
         "burnKey": U256::from_le_bytes(burn_key.to_repr().0).to_string(),
         "fee": fee.to_string(),
         "spend": spend.to_string(),
+        "byteSecurityRelax": 0
     }))
 }
 
@@ -141,6 +184,32 @@ async fn main() -> Result<(), anyhow::Error> {
     let opt = MinerOpt::from_args();
 
     match opt {
+        MinerOpt::Rapidsnark { zkey, witness } => {
+            let params = std::fs::read(zkey)?;
+            let witness = std::fs::read(witness)?;
+            let proof = rapidsnark(&params, &witness)?;
+            let proof_proof: RapidsnarkProof = serde_json::from_str(&proof.proof)?;
+            let proof_public: Vec<U256> = serde_json::from_str(&proof.public)?;
+            println!(
+                "{}",
+                serde_json::to_string(&RapidsnarkOutput {
+                    proof: proof_proof,
+                    public: proof_public
+                })?
+            );
+        }
+        MinerOpt::GenerateWitness(gw_opt) => match gw_opt {
+            GenerateWitnessOpt::ProofOfBurn(gw_pob_opt) => {
+                generate_proof_of_burn_witness_file(
+                    gw_pob_opt.dat,
+                    gw_pob_opt.input,
+                    gw_pob_opt.witness,
+                )?;
+            }
+            GenerateWitnessOpt::Spend => {
+                unimplemented!()
+            }
+        },
         MinerOpt::Burn(burn_opt) => {
             let fee = parse_ether(&burn_opt.fee)?;
             let spend = parse_ether(&burn_opt.spend)?;
@@ -152,6 +221,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 ));
             }
 
+            let wallet_addr = burn_opt.private_key.address();
+
             let provider = ProviderBuilder::new()
                 .wallet(burn_opt.private_key)
                 .connect_http(burn_opt.rpc);
@@ -159,6 +230,16 @@ async fn main() -> Result<(), anyhow::Error> {
             let burn_key = find_burn_key(3);
 
             let burn_addr = generate_burn_address(burn_key, burn_opt.receiver);
+            let nullifier = poseidon2([burn_key, Fp::from(1)]);
+
+            let remaining_coin_val =
+                Fp::from_repr(FpRepr((amount - fee - spend).to_le_bytes::<32>())).unwrap();
+            let remaining_coin = poseidon2([burn_key, remaining_coin_val]);
+
+            println!(
+                "[{:?},{:?},{},{},{}]",
+                nullifier, remaining_coin, fee, spend, burn_opt.receiver
+            );
 
             println!(
                 "Your burn-key: {}",
@@ -166,11 +247,13 @@ async fn main() -> Result<(), anyhow::Error> {
             );
             println!("Your burn-address is: {}", burn_addr);
 
+            let nonce = provider.get_transaction_count(wallet_addr).await?;
+
             // Build a transaction to send 100 wei from Alice to Bob.
             // The `from` field is automatically filled to the first signer's address (Alice).
             let tx = TransactionRequest::default()
                 .with_to(burn_addr)
-                .with_nonce(0)
+                .with_nonce(nonce)
                 .with_chain_id(provider.get_chain_id().await?)
                 .with_value(amount)
                 .with_gas_limit(21_000)
@@ -195,33 +278,49 @@ async fn main() -> Result<(), anyhow::Error> {
                 .get_block(BlockId::latest())
                 .await?
                 .ok_or(anyhow!("Block not found!"))?;
+            println!("Generated proof for block #{}", block.header.number);
             let mut header_bytes = Vec::new();
             block.header.inner.encode(&mut header_bytes);
             let proof = provider.get_proof(burn_addr, vec![]).await?;
 
             let proof_dir = tempdir()?;
-            let input_json_path = proof_dir.path().join("input.json");
-            let witness_path = proof_dir.path().join("witness.wtns");
+            let input_json_path = "input.json";
+            let witness_path = "witness.wtns"; //proof_dir.path().join("witness.wtns");
 
-            println!(
-                "Generating input.json file at: {}",
-                input_json_path.display()
-            );
+            println!("Generating input.json file at: {}", input_json_path);
             std::fs::write(
                 &input_json_path,
                 input_file(proof, header_bytes, burn_key, fee, spend, burn_opt.receiver)?
                     .to_string(),
             )?;
 
-            println!(
-                "Generating witness.wtns file at: {}",
-                witness_path.display()
-            );
-            let _output = Command::new("./main_proof_of_burn")
-                .current_dir("main_proof_of_burn_cpp")
-                .arg(&input_json_path)
-                .arg(&witness_path)
+            let proc_path = std::env::current_exe().expect("Failed to get current exe path");
+
+            println!("Generating witness.wtns file at: {}", witness_path);
+            Command::new(&proc_path)
+                .arg("generate-witness")
+                .arg("proof-of-burn")
+                .arg("--input")
+                .arg(input_json_path)
+                .arg("--dat")
+                .arg("proof_of_burn.dat")
+                .arg("--witness")
+                .arg(witness_path)
                 .output()?;
+
+            println!("Generating proof...");
+            let output: RapidsnarkOutput = serde_json::from_slice(
+                &Command::new(&proc_path)
+                    .arg("rapidsnark")
+                    .arg("--zkey")
+                    .arg("groth16_pkey.zkey")
+                    .arg("--witness")
+                    .arg(witness_path)
+                    .output()?
+                    .stdout,
+            )?;
+
+            println!("{:?}", output);
         }
         MinerOpt::Mine => {}
     }
