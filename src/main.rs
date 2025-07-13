@@ -29,6 +29,8 @@ struct BurnOpt {
     spend: String,
     #[structopt(long)]
     receiver: Address,
+    #[structopt(long)]
+    contract: Address,
 }
 
 #[derive(StructOpt)]
@@ -177,7 +179,15 @@ fn input_file(
 }
 
 use alloy::rlp::Encodable;
+use alloy::sol;
 use tempfile::tempdir;
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    BETH,
+    "./src/BETH.abi.json"
+);
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -229,6 +239,11 @@ async fn main() -> Result<(), anyhow::Error> {
             let provider = ProviderBuilder::new()
                 .wallet(burn_opt.private_key)
                 .connect_http(burn_opt.rpc);
+
+            if provider.get_code_at(burn_opt.contract).await?.0.is_empty() {
+                panic!("BETH contract does not exist!");
+            }
+
             println!("Generating a burn-key...");
             let burn_key = find_burn_key(3);
 
@@ -238,11 +253,6 @@ async fn main() -> Result<(), anyhow::Error> {
             let remaining_coin_val =
                 Fp::from_repr(FpRepr((amount - fee - spend).to_le_bytes::<32>())).unwrap();
             let remaining_coin = poseidon2([burn_key, remaining_coin_val]);
-
-            println!(
-                "[{:?},{:?},{},{},{}]",
-                nullifier, remaining_coin, fee, spend, burn_opt.receiver
-            );
 
             println!(
                 "Your burn-key: {}",
@@ -324,6 +334,30 @@ async fn main() -> Result<(), anyhow::Error> {
             )?;
 
             println!("Generated proof successfully! {:?}", output);
+
+            println!("Broadcasting mint transaction...");
+            let beth = BETH::new(burn_opt.contract, provider);
+            let mint_receipt = beth
+                .mintCoin(
+                    [output.proof.pi_a[0], output.proof.pi_a[1]],
+                    [
+                        [output.proof.pi_b[0][1], output.proof.pi_b[0][0]],
+                        [output.proof.pi_b[1][1], output.proof.pi_b[1][0]],
+                    ],
+                    [output.proof.pi_c[0], output.proof.pi_c[1]],
+                    U256::from(block.header.number),
+                    U256::from_le_bytes(nullifier.to_repr().0),
+                    U256::from_le_bytes(remaining_coin.to_repr().0),
+                    fee,
+                    spend,
+                    burn_opt.receiver,
+                )
+                .send()
+                .await?
+                .get_receipt()
+                .await?;
+
+            println!("Receipt: {:?}", mint_receipt);
         }
         MinerOpt::Mine => {}
     }
