@@ -16,6 +16,30 @@ use worm_witness_gens::{
 };
 
 #[derive(StructOpt)]
+struct InfoOpt {
+    #[structopt(long, default_value = "http://127.0.0.1:8545")]
+    rpc: reqwest::Url,
+    #[structopt(long)]
+    private_key: PrivateKeySigner,
+    #[structopt(long)]
+    beth_contract: Address,
+    #[structopt(long)]
+    worm_contract: Address,
+}
+
+#[derive(StructOpt)]
+struct ParticipateOpt {
+    #[structopt(long, default_value = "http://127.0.0.1:8545")]
+    rpc: reqwest::Url,
+    #[structopt(long)]
+    private_key: PrivateKeySigner,
+    #[structopt(long)]
+    amount_per_epoch: String,
+    #[structopt(long)]
+    num_epochs: usize,
+}
+
+#[derive(StructOpt)]
 struct BurnOpt {
     #[structopt(long, default_value = "http://127.0.0.1:8545")]
     rpc: reqwest::Url,
@@ -51,6 +75,9 @@ enum GenerateWitnessOpt {
 
 #[derive(StructOpt)]
 enum MinerOpt {
+    Info(InfoOpt),
+    Participate(ParticipateOpt),
+    Claim,
     Rapidsnark {
         #[structopt(long)]
         zkey: PathBuf,
@@ -67,7 +94,7 @@ use alloy::{
     hex::ToHexExt,
     network::TransactionBuilder,
     primitives::{
-        Address, B256, U256, keccak256,
+        Address, B256, U256, address, keccak256,
         utils::{format_ether, parse_ether},
     },
     providers::{Provider, ProviderBuilder},
@@ -189,6 +216,13 @@ sol!(
     "./src/BETH.abi.json"
 );
 
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    WORM,
+    "./src/WORM.abi.json"
+);
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let opt = MinerOpt::from_args();
@@ -197,6 +231,63 @@ async fn main() -> Result<(), anyhow::Error> {
         .join(".worm-miner");
 
     match opt {
+        MinerOpt::Claim => {}
+        MinerOpt::Info(info_opt) => {
+            let addr = info_opt.private_key.address();
+            let provider = ProviderBuilder::new()
+                .wallet(info_opt.private_key)
+                .connect_http(info_opt.rpc);
+            let worm = WORM::new(info_opt.worm_contract, provider.clone());
+            let beth = WORM::new(info_opt.beth_contract, provider.clone());
+            let worm_balance = worm.balanceOf(addr).call().await?;
+            let epoch = worm.currentEpoch().call().await?;
+            let beth_balance = beth.balanceOf(addr).call().await?;
+            let num_epochs_to_check = std::cmp::min(epoch, U256::from(10));
+            let claimable_worm = worm
+                .calculateMintAmount(
+                    epoch.saturating_sub(U256::from(num_epochs_to_check)),
+                    num_epochs_to_check,
+                    addr,
+                )
+                .call()
+                .await?;
+            println!("Current epoch: {}", epoch);
+            println!("BETH balance: {}", format_ether(beth_balance));
+            println!("WORM balance: {}", format_ether(worm_balance));
+            println!("Claimable WORM: {}", format_ether(claimable_worm));
+        }
+        MinerOpt::Participate(participate_opt) => {
+            let beth_contract = address!("0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab");
+            let worm_contract = address!("0x5b1869D9A4C187F2EAa108f3062412ecf0526b24");
+            let provider = ProviderBuilder::new()
+                .wallet(participate_opt.private_key)
+                .connect_http(participate_opt.rpc);
+            let amount_per_epoch = parse_ether(&participate_opt.amount_per_epoch)?;
+            let worm = WORM::new(worm_contract, provider.clone());
+            let beth = WORM::new(beth_contract, provider.clone());
+            println!("Approving BETH...");
+            let beth_approve_receipt = beth
+                .approve(
+                    worm_contract,
+                    amount_per_epoch * U256::from(participate_opt.num_epochs),
+                )
+                .send()
+                .await?
+                .get_receipt()
+                .await?;
+            if !beth_approve_receipt.status() {
+                panic!("Failed on BETH approval!");
+            }
+            let receipt = worm
+                .participate(amount_per_epoch, U256::from(participate_opt.num_epochs))
+                .send()
+                .await?
+                .get_receipt()
+                .await?;
+            if receipt.status() {
+                println!("Success!");
+            }
+        }
         MinerOpt::Rapidsnark { zkey, witness } => {
             let params = std::fs::read(zkey)?;
             let witness = std::fs::read(witness)?;
@@ -377,7 +468,6 @@ async fn main() -> Result<(), anyhow::Error> {
             if mint_receipt.status() {
                 println!("Success!");
             }
-            
         }
         MinerOpt::Mine => {}
     }
