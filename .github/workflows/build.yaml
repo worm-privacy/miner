@@ -30,15 +30,15 @@ jobs:
         
       - name: Install foundry
         run: |
-          . ~/.bashrc && foundryup
+          /home/runner/.foundry/bin/foundryup
 
       - name: Run Anvil
         run: |
-          . ~/.bashrc && anvil --mnemonic "myth like bonus scare over problem client lizard pioneer submit female collect" &
+          /home/runner/.foundry/bin/anvil --mnemonic "myth like bonus scare over problem client lizard pioneer submit female collect" &
 
       - name: Deploy on Anvil
         run: |
-          . ~/.bashrc && sleep 5 && git clone https://github.com/worm-privacy/worm && cd worm && forge create --rpc-url http://127.0.0.1:8545 src/BETH.sol:BETH --private-key 0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d --broadcast    
+          . ~/.bashrc && sleep 5 && git clone https://github.com/worm-privacy/worm && cd worm && /home/runner/.foundry/bin/forge create --rpc-url http://127.0.0.1:8545 src/BETH.sol:BETH --private-key 0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d --broadcast    
       
       - name: Install miner
         run: |
