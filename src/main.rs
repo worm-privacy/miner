@@ -230,7 +230,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 "spend.dat",
                 "spend.zkey",
             ];
-            
+
             for req_file in required_files {
                 let full_path = params_dir.join(req_file);
                 if !std::fs::exists(&full_path)? {
@@ -374,7 +374,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 .get_receipt()
                 .await?;
 
-            println!("Receipt: {:?}", mint_receipt);
+            if mint_receipt.status() {
+                println!("Success!");
+            }
+            
         }
         MinerOpt::Mine => {}
     }
