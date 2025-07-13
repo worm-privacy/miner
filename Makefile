@@ -1,7 +1,7 @@
 .PHONY=download_params
 
 download_params:
-	mkdir ~/.worm-miner
+	mkdir -p ~/.worm-miner
 	echo "Downloading parameter files..."
 	cd ~/.worm-miner && wget -c https://github.com/worm-privacy/proof-of-burn/releases/download/v0.1.0/params.tar.gz.aa
 	cd ~/.worm-miner && wget -c https://github.com/worm-privacy/proof-of-burn/releases/download/v0.1.0/params.tar.gz.ab
@@ -10,5 +10,7 @@ download_params:
 	cd ~/.worm-miner && wget -c https://github.com/worm-privacy/proof-of-burn/releases/download/v0.1.0/params.tar.gz.ae
 	echo "Extracting parameter files..."
 	cat ~/.worm-miner/params.tar.gz.a* > ~/.worm-miner/params.tar.gz
+	rm -rf ~/.worm-miner/params.tar.gz.a*
 	cd ~/.worm-miner && tar xzf params.tar.gz
+	rm -rf ~/.worm-miner/params.tar.gz
 	echo "Done!"
