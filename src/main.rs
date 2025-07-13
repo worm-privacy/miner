@@ -224,6 +224,23 @@ async fn main() -> Result<(), anyhow::Error> {
             }
         },
         MinerOpt::Burn(burn_opt) => {
+            let required_files = [
+                "proof_of_burn.dat",
+                "proof_of_burn.zkey",
+                "spend.dat",
+                "spend.zkey",
+            ];
+            
+            for req_file in required_files {
+                let full_path = params_dir.join(req_file);
+                if !std::fs::exists(&full_path)? {
+                    panic!(
+                        "File {} does not exist! Make sure you have downloaded all required files through `make download_params`!",
+                        full_path.display()
+                    );
+                }
+            }
+
             let fee = parse_ether(&burn_opt.fee)?;
             let spend = parse_ether(&burn_opt.spend)?;
             let amount = parse_ether(&burn_opt.amount)?;
