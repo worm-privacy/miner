@@ -23,7 +23,19 @@ jobs:
       - name: Install Rust toolchain
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          
+      
+      - name: Install foundry
+        run: |
+          curl -L https://foundry.paradigm.xyz | bash
+        
+      - name: Run Anvil
+        run: |
+          anvil --mnemonic "myth like bonus scare over problem client lizard pioneer submit female collect" &
+
+      - name: Deploy on Anvil
+        run: |
+          sleep 5 && git clone https://github.com/worm-privacy/worm && cd worm && forge create --rpc-url http://127.0.0.1:8545 src/BETH.sol:BETH --private-key 0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d --broadcast    
+      
       - name: Install miner
         run: |
           . ~/.bashrc && cargo install --path .
