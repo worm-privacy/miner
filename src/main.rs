@@ -430,6 +430,10 @@ async fn main() -> Result<(), anyhow::Error> {
             let spend = parse_ether(&burn_opt.spend)?;
             let amount = parse_ether(&burn_opt.amount)?;
 
+            if amount >= parse_ether("1")? {
+                return Err(anyhow!("Can't burn more than 1 ETH!"));
+            } 
+
             if fee + spend > amount {
                 return Err(anyhow!(
                     "Sum of --fee and --spend should be less than --amount!"
