@@ -63,12 +63,12 @@
         "name": "approximate",
         "inputs": [
             {
-                "name": "_amount_per_epoch",
+                "name": "_amountPerEpoch",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "_num_epochs",
+                "name": "_numEpochs",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -119,12 +119,12 @@
         "name": "calculateMintAmount",
         "inputs": [
             {
-                "name": "_starting_epoch",
+                "name": "_startingEpoch",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "_num_epochs",
+                "name": "_numEpochs",
                 "type": "uint256",
                 "internalType": "uint256"
             },
@@ -148,12 +148,12 @@
         "name": "claim",
         "inputs": [
             {
-                "name": "_starting_epoch",
+                "name": "_startingEpoch",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "_num_epochs",
+                "name": "_numEpochs",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -214,7 +214,7 @@
     },
     {
         "type": "function",
-        "name": "epoch_user",
+        "name": "epochUser",
         "inputs": [
             {
                 "name": "",
@@ -254,12 +254,12 @@
         "name": "participate",
         "inputs": [
             {
-                "name": "_amount_per_epoch",
+                "name": "_amountPerEpoch",
                 "type": "uint256",
                 "internalType": "uint256"
             },
             {
-                "name": "_num_epochs",
+                "name": "_numEpochs",
                 "type": "uint256",
                 "internalType": "uint256"
             }
@@ -269,7 +269,7 @@
     },
     {
         "type": "function",
-        "name": "startingBlock",
+        "name": "startingTimestamp",
         "inputs": [],
         "outputs": [
             {

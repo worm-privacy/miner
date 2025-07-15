@@ -15,22 +15,58 @@ use worm_witness_gens::{
     generate_proof_of_burn_witness_file, generate_spend_witness_file, rapidsnark,
 };
 
+#[derive(Debug, Clone)]
+struct Network {
+    rpc: reqwest::Url,
+    beth: Address,
+    worm: Address,
+}
+
+lazy_static::lazy_static! {
+    static ref NETWORKS: HashMap<String, Network> = {
+        [
+            (
+                "anvil".into(),
+                Network {
+                    rpc: "http://127.0.0.1:8545".parse().unwrap(),
+                    beth: address!("0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"),
+                    worm: address!("0x5b1869D9A4C187F2EAa108f3062412ecf0526b24"),
+                },
+            ),
+            (
+                "sepolia".into(),
+                Network {
+                    rpc: "https://sepolia.drpc.org".parse().unwrap(),
+                    beth: address!("0x6fa638704a839B28C5B7168C8916AdD9F75CDEEc"),
+                    worm: address!("0x6B71B86586378C93503Bc1FD1530D54B9e3A45D6"),
+                },
+            ),
+        ]
+        .into_iter()
+        .collect()
+    };
+}
+
 #[derive(StructOpt)]
 struct InfoOpt {
-    #[structopt(long, default_value = "http://127.0.0.1:8545")]
-    rpc: reqwest::Url,
+    #[structopt(long, default_value = "anvil")]
+    network: String,
     #[structopt(long)]
     private_key: PrivateKeySigner,
+}
+
+#[derive(StructOpt)]
+struct ClaimOpt {
+    #[structopt(long, default_value = "anvil")]
+    network: String,
     #[structopt(long)]
-    beth_contract: Address,
-    #[structopt(long)]
-    worm_contract: Address,
+    private_key: PrivateKeySigner,
 }
 
 #[derive(StructOpt)]
 struct ParticipateOpt {
-    #[structopt(long, default_value = "http://127.0.0.1:8545")]
-    rpc: reqwest::Url,
+    #[structopt(long, default_value = "anvil")]
+    network: String,
     #[structopt(long)]
     private_key: PrivateKeySigner,
     #[structopt(long)]
@@ -41,8 +77,8 @@ struct ParticipateOpt {
 
 #[derive(StructOpt)]
 struct BurnOpt {
-    #[structopt(long, default_value = "http://127.0.0.1:8545")]
-    rpc: reqwest::Url,
+    #[structopt(long, default_value = "anvil")]
+    network: String,
     #[structopt(long)]
     private_key: PrivateKeySigner,
     #[structopt(long)]
@@ -53,8 +89,6 @@ struct BurnOpt {
     spend: String,
     #[structopt(long)]
     receiver: Address,
-    #[structopt(long)]
-    contract: Address,
 }
 
 #[derive(StructOpt)]
@@ -77,7 +111,7 @@ enum GenerateWitnessOpt {
 enum MinerOpt {
     Info(InfoOpt),
     Participate(ParticipateOpt),
-    Claim,
+    Claim(ClaimOpt),
     Rapidsnark {
         #[structopt(long)]
         zkey: PathBuf,
@@ -90,12 +124,14 @@ enum MinerOpt {
 }
 
 use alloy::{
+    consensus::Receipt,
     eips::BlockId,
     hex::ToHexExt,
     network::TransactionBuilder,
     primitives::{
         Address, B256, U256, address, keccak256,
-        utils::{format_ether, parse_ether},
+        map::HashMap,
+        utils::{format_ether, format_units, parse_ether},
     },
     providers::{Provider, ProviderBuilder},
     rlp::RlpDecodable,
@@ -231,21 +267,45 @@ async fn main() -> Result<(), anyhow::Error> {
         .join(".worm-miner");
 
     match opt {
-        MinerOpt::Claim => {}
+        MinerOpt::Claim(claim_opt) => {
+            let addr = claim_opt.private_key.address();
+            let net = NETWORKS.get(&claim_opt.network).expect("Invalid network!");
+            let provider = ProviderBuilder::new()
+                .wallet(claim_opt.private_key)
+                .connect_http(net.rpc.clone());
+            let worm = WORM::new(net.worm, provider.clone());
+            let epoch = worm.currentEpoch().call().await?;
+            let num_epochs_to_check = std::cmp::min(epoch, U256::from(10));
+            let receipt = worm
+                .claim(
+                    epoch.saturating_sub(U256::from(num_epochs_to_check)),
+                    num_epochs_to_check,
+                )
+                .send()
+                .await?
+                .get_receipt()
+                .await?;
+            if receipt.status() {
+                println!("Success!");
+                let worm_balance = worm.balanceOf(addr).call().await?;
+                println!("WORM balance: {}", format_ether(worm_balance));
+            }
+        }
         MinerOpt::Info(info_opt) => {
             let addr = info_opt.private_key.address();
+            let net = NETWORKS.get(&info_opt.network).expect("Invalid network!");
             let provider = ProviderBuilder::new()
                 .wallet(info_opt.private_key)
-                .connect_http(info_opt.rpc);
-            let worm = WORM::new(info_opt.worm_contract, provider.clone());
-            let beth = WORM::new(info_opt.beth_contract, provider.clone());
+                .connect_http(net.rpc.clone());
+            let worm = WORM::new(net.worm, provider.clone());
+            let beth = BETH::new(net.beth, provider.clone());
             let worm_balance = worm.balanceOf(addr).call().await?;
             let epoch = worm.currentEpoch().call().await?;
             let beth_balance = beth.balanceOf(addr).call().await?;
             let num_epochs_to_check = std::cmp::min(epoch, U256::from(10));
             let claimable_worm = worm
                 .calculateMintAmount(
-                    epoch.saturating_sub(U256::from(num_epochs_to_check)),
+                    epoch.saturating_sub(num_epochs_to_check),
                     num_epochs_to_check,
                     addr,
                 )
@@ -254,21 +314,42 @@ async fn main() -> Result<(), anyhow::Error> {
             println!("Current epoch: {}", epoch);
             println!("BETH balance: {}", format_ether(beth_balance));
             println!("WORM balance: {}", format_ether(worm_balance));
-            println!("Claimable WORM: {}", format_ether(claimable_worm));
+            println!(
+                "Claimable WORM (10 last epochs): {}",
+                format_ether(claimable_worm)
+            );
+            let epoch_u64 = epoch.as_limbs()[0];
+            for e in epoch_u64..epoch_u64 + 10 {
+                let total = worm.epochTotal(U256::from(e)).call().await?;
+                let user = worm.epochUser(U256::from(e), addr).call().await?;
+                let share = if !total.is_zero() {
+                    user * U256::from(50) * U256::from(10).pow(U256::from(18)) / total
+                } else {
+                    U256::ZERO
+                };
+                println!(
+                    "Epoch #{} => {} / {} (Expecting {} WORM)",
+                    e,
+                    format_ether(user),
+                    format_ether(total),
+                    format_ether(share)
+                );
+            }
         }
         MinerOpt::Participate(participate_opt) => {
-            let beth_contract = address!("0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab");
-            let worm_contract = address!("0x5b1869D9A4C187F2EAa108f3062412ecf0526b24");
+            let net = NETWORKS
+                .get(&participate_opt.network)
+                .expect("Invalid network!");
             let provider = ProviderBuilder::new()
                 .wallet(participate_opt.private_key)
-                .connect_http(participate_opt.rpc);
+                .connect_http(net.rpc.clone());
             let amount_per_epoch = parse_ether(&participate_opt.amount_per_epoch)?;
-            let worm = WORM::new(worm_contract, provider.clone());
-            let beth = WORM::new(beth_contract, provider.clone());
+            let worm = WORM::new(net.worm, provider.clone());
+            let beth = BETH::new(net.beth, provider.clone());
             println!("Approving BETH...");
             let beth_approve_receipt = beth
                 .approve(
-                    worm_contract,
+                    net.worm,
                     amount_per_epoch * U256::from(participate_opt.num_epochs),
                 )
                 .send()
@@ -315,6 +396,8 @@ async fn main() -> Result<(), anyhow::Error> {
             }
         },
         MinerOpt::Burn(burn_opt) => {
+            let net = NETWORKS.get(&burn_opt.network).expect("Invalid network!");
+
             let required_files = [
                 "proof_of_burn.dat",
                 "proof_of_burn.zkey",
@@ -346,9 +429,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let provider = ProviderBuilder::new()
                 .wallet(burn_opt.private_key)
-                .connect_http(burn_opt.rpc);
+                .connect_http(net.rpc.clone());
 
-            if provider.get_code_at(burn_opt.contract).await?.0.is_empty() {
+            if provider.get_code_at(net.beth).await?.0.is_empty() {
                 panic!("BETH contract does not exist!");
             }
 
@@ -444,7 +527,7 @@ async fn main() -> Result<(), anyhow::Error> {
             println!("Generated proof successfully! {:?}", output);
 
             println!("Broadcasting mint transaction...");
-            let beth = BETH::new(burn_opt.contract, provider);
+            let beth = BETH::new(net.beth, provider);
             let mint_receipt = beth
                 .mintCoin(
                     [output.proof.pi_a[0], output.proof.pi_a[1]],
