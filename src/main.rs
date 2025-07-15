@@ -1,7 +1,7 @@
 mod fp;
 mod poseidon2;
 
-use std::{path::PathBuf, process::Command};
+use std::{path::PathBuf, process::Command, time::Duration};
 
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
@@ -11,9 +11,7 @@ use poseidon2::poseidon2;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use structopt::StructOpt;
-use worm_witness_gens::{
-    generate_proof_of_burn_witness_file, generate_spend_witness_file, rapidsnark,
-};
+use worm_witness_gens::{generate_proof_of_burn_witness_file, rapidsnark};
 
 #[derive(Debug, Clone)]
 struct Network {
@@ -38,7 +36,7 @@ lazy_static::lazy_static! {
                 Network {
                     rpc: "https://sepolia.drpc.org".parse().unwrap(),
                     beth: address!("0x6fa638704a839B28C5B7168C8916AdD9F75CDEEc"),
-                    worm: address!("0x6B71B86586378C93503Bc1FD1530D54B9e3A45D6"),
+                    worm: address!("0x557E9e7Eed905C7d21183Ec333dB2a8B1e34A85F"),
                 },
             ),
         ]
@@ -61,6 +59,22 @@ struct ClaimOpt {
     network: String,
     #[structopt(long)]
     private_key: PrivateKeySigner,
+}
+
+#[derive(StructOpt)]
+struct MineOpt {
+    #[structopt(long, default_value = "anvil")]
+    network: String,
+    #[structopt(long)]
+    private_key: PrivateKeySigner,
+    #[structopt(long)]
+    min_beth_per_epoch: String,
+    #[structopt(long)]
+    max_beth_per_epoch: String,
+    #[structopt(long)]
+    assumed_worm_price: String,
+    #[structopt(long)]
+    future_epochs: usize,
 }
 
 #[derive(StructOpt)]
@@ -87,8 +101,6 @@ struct BurnOpt {
     fee: String,
     #[structopt(long, default_value = "0")]
     spend: String,
-    #[structopt(long)]
-    receiver: Address,
 }
 
 #[derive(StructOpt)]
@@ -120,18 +132,17 @@ enum MinerOpt {
     },
     GenerateWitness(GenerateWitnessOpt),
     Burn(BurnOpt),
-    Mine,
+    Mine(MineOpt),
 }
 
 use alloy::{
-    consensus::Receipt,
     eips::BlockId,
     hex::ToHexExt,
     network::TransactionBuilder,
     primitives::{
         Address, B256, U256, address, keccak256,
         map::HashMap,
-        utils::{format_ether, format_units, parse_ether},
+        utils::{format_ether, parse_ether},
     },
     providers::{Provider, ProviderBuilder},
     rlp::RlpDecodable,
@@ -438,7 +449,7 @@ async fn main() -> Result<(), anyhow::Error> {
             println!("Generating a burn-key...");
             let burn_key = find_burn_key(3);
 
-            let burn_addr = generate_burn_address(burn_key, burn_opt.receiver);
+            let burn_addr = generate_burn_address(burn_key, wallet_addr);
             let nullifier = poseidon2([burn_key, Fp::from(1)]);
 
             let remaining_coin_val =
@@ -494,8 +505,7 @@ async fn main() -> Result<(), anyhow::Error> {
             println!("Generating input.json file at: {}", input_json_path);
             std::fs::write(
                 &input_json_path,
-                input_file(proof, header_bytes, burn_key, fee, spend, burn_opt.receiver)?
-                    .to_string(),
+                input_file(proof, header_bytes, burn_key, fee, spend, wallet_addr)?.to_string(),
             )?;
 
             let proc_path = std::env::current_exe().expect("Failed to get current exe path");
@@ -541,7 +551,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     U256::from_le_bytes(remaining_coin.to_repr().0),
                     fee,
                     spend,
-                    burn_opt.receiver,
+                    wallet_addr,
                 )
                 .send()
                 .await?
@@ -552,7 +562,115 @@ async fn main() -> Result<(), anyhow::Error> {
                 println!("Success!");
             }
         }
-        MinerOpt::Mine => {}
+        MinerOpt::Mine(mine_opt) => {
+            let assumed_worm_price = parse_ether(&mine_opt.assumed_worm_price)?;
+            let minimum_beth_per_epoch = parse_ether(&mine_opt.min_beth_per_epoch)?;
+            let maximum_beth_per_epoch = parse_ether(&mine_opt.max_beth_per_epoch)?;
+            let addr = mine_opt.private_key.address();
+            let net = NETWORKS.get(&mine_opt.network).expect("Invalid network!");
+            let provider = ProviderBuilder::new()
+                .wallet(mine_opt.private_key)
+                .connect_http(net.rpc.clone());
+            let worm = WORM::new(net.worm, provider.clone());
+            let beth = BETH::new(net.beth, provider.clone());
+            if beth.allowance(addr, net.worm).call().await?.is_zero() {
+                println!("Approving infinite BETH allowance to WORM contract...");
+                let beth_approve_receipt = beth
+                    .approve(net.worm, U256::MAX)
+                    .send()
+                    .await?
+                    .get_receipt()
+                    .await?;
+                if !beth_approve_receipt.status() {
+                    panic!("Failed on BETH approval!");
+                }
+            }
+            if beth.balanceOf(addr).call().await?.is_zero() {
+                println!(
+                    "You don't have any BETH! Mine some BETH through the `worm-miner burn` command."
+                );
+            } else {
+                // WORM miner equation:
+                // userShare / (userShare + totalShare) * 50 * assumedWormPrice >= userShare
+                // if totalShare > 0 => userShare = 50 * assumedWormPrice - totalShare
+                // if totalShare = 0 => userShare = minimumBethPerEpoch
+                loop {
+                    let epoch = worm.currentEpoch().call().await?;
+                    let previous_epoch = epoch.saturating_sub(U256::ONE);
+                    let previous_total_share = worm.epochTotal(previous_epoch).call().await?;
+                    let current_total_share = worm.epochTotal(epoch).call().await?;
+                    let current_user_share = worm.epochUser(epoch, addr).call().await?;
+                    let user_share = std::cmp::min(
+                        std::cmp::max(
+                            if current_total_share.is_zero() {
+                                minimum_beth_per_epoch
+                            } else {
+                                (U256::from(50) * assumed_worm_price)
+                                    .saturating_sub(previous_total_share)
+                            },
+                            minimum_beth_per_epoch,
+                        ),
+                        maximum_beth_per_epoch,
+                    )
+                    .saturating_sub(current_user_share);
+                    if user_share >= minimum_beth_per_epoch {
+                        println!(
+                            "Participating {} x {} for epochs {}..{}",
+                            mine_opt.future_epochs,
+                            format_ether(user_share),
+                            epoch,
+                            epoch + U256::from(mine_opt.future_epochs)
+                        );
+                        let receipt = worm
+                            .participate(user_share, U256::from(mine_opt.future_epochs as u64))
+                            .send()
+                            .await?
+                            .get_receipt()
+                            .await?;
+                        if receipt.status() {
+                            println!("Success!");
+                        }
+                    }
+
+                    let eth_balance = provider.get_balance(addr).await?;
+                    let beth_balance = beth.balanceOf(addr).call().await?;
+                    let worm_balance = worm.balanceOf(addr).call().await?;
+                    let num_epochs_to_check = std::cmp::min(epoch, U256::from(10));
+                    let claimable_worm = worm
+                        .calculateMintAmount(
+                            epoch.saturating_sub(num_epochs_to_check),
+                            num_epochs_to_check,
+                            addr,
+                        )
+                        .call()
+                        .await?;
+                    if !(epoch % U256::from(10)).is_zero() && claimable_worm.is_zero() {
+                        println!("Claiming WORMs...");
+                        let receipt = worm
+                            .claim(
+                                epoch.saturating_sub(num_epochs_to_check),
+                                num_epochs_to_check,
+                            )
+                            .send()
+                            .await?
+                            .get_receipt()
+                            .await?;
+                        if receipt.status() {
+                            println!("Success!");
+                        }
+                    }
+                    println!(
+                        "ETH: {} BETH: {} WORM: {} Claimable WORM: {}",
+                        format_ether(eth_balance),
+                        format_ether(beth_balance),
+                        format_ether(worm_balance),
+                        format_ether(claimable_worm)
+                    );
+
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                }
+            }
+        }
     }
     Ok(())
 }
