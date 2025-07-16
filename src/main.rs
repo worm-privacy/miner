@@ -59,6 +59,8 @@ struct ClaimOpt {
     network: String,
     #[structopt(long)]
     private_key: PrivateKeySigner,
+    #[structopt(long, default_value = "10")]
+    epochs_to_check: usize,
 }
 
 #[derive(StructOpt)]
@@ -286,7 +288,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .connect_http(net.rpc.clone());
             let worm = WORM::new(net.worm, provider.clone());
             let epoch = worm.currentEpoch().call().await?;
-            let num_epochs_to_check = std::cmp::min(epoch, U256::from(10));
+            let num_epochs_to_check = std::cmp::min(epoch, U256::from(claim_opt.epochs_to_check));
             let receipt = worm
                 .claim(
                     epoch.saturating_sub(U256::from(num_epochs_to_check)),
@@ -432,7 +434,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
             if amount >= parse_ether("1")? {
                 return Err(anyhow!("Can't burn more than 1 ETH!"));
-            } 
+            }
 
             if fee + spend > amount {
                 return Err(anyhow!(
@@ -617,6 +619,17 @@ async fn main() -> Result<(), anyhow::Error> {
                         maximum_beth_per_epoch,
                     )
                     .saturating_sub(current_user_share);
+
+                    let num_epochs_to_check = std::cmp::min(epoch, U256::from(10));
+                    let claimable_worm = worm
+                        .calculateMintAmount(
+                            epoch.saturating_sub(num_epochs_to_check),
+                            num_epochs_to_check,
+                            addr,
+                        )
+                        .call()
+                        .await?;
+
                     if user_share >= minimum_beth_per_epoch {
                         println!(
                             "Participating {} x {} for epochs {}..{}",
@@ -634,35 +647,28 @@ async fn main() -> Result<(), anyhow::Error> {
                         if receipt.status() {
                             println!("Success!");
                         }
+
+                        if !(epoch % U256::from(10)).is_zero() && claimable_worm.is_zero() {
+                            println!("Claiming WORMs...");
+                            let receipt = worm
+                                .claim(
+                                    epoch.saturating_sub(num_epochs_to_check),
+                                    num_epochs_to_check,
+                                )
+                                .send()
+                                .await?
+                                .get_receipt()
+                                .await?;
+                            if receipt.status() {
+                                println!("Success!");
+                            }
+                        }
                     }
 
                     let eth_balance = provider.get_balance(addr).await?;
                     let beth_balance = beth.balanceOf(addr).call().await?;
                     let worm_balance = worm.balanceOf(addr).call().await?;
-                    let num_epochs_to_check = std::cmp::min(epoch, U256::from(10));
-                    let claimable_worm = worm
-                        .calculateMintAmount(
-                            epoch.saturating_sub(num_epochs_to_check),
-                            num_epochs_to_check,
-                            addr,
-                        )
-                        .call()
-                        .await?;
-                    if !(epoch % U256::from(10)).is_zero() && claimable_worm.is_zero() {
-                        println!("Claiming WORMs...");
-                        let receipt = worm
-                            .claim(
-                                epoch.saturating_sub(num_epochs_to_check),
-                                num_epochs_to_check,
-                            )
-                            .send()
-                            .await?
-                            .get_receipt()
-                            .await?;
-                        if receipt.status() {
-                            println!("Success!");
-                        }
-                    }
+
                     println!(
                         "ETH: {} BETH: {} WORM: {} Claimable WORM: {}",
                         format_ether(eth_balance),
