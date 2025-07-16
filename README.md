@@ -48,3 +48,4 @@ Test on Debian/Ubuntu systems:
       - `--max-beth-per-epoch` is the max amount of BETH you are willing to consume in order to participate in any block.
       - `--assumed-worm-price` is your assumed WORM/ETH pair price.
       - `--future-epochs` is the number of epochs you would like to participate in in advance.
+      - `--custom-rpc` is an optional parameter that takes in an rpc-url.
