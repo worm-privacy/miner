@@ -77,6 +77,8 @@ struct MineOpt {
     assumed_worm_price: String,
     #[structopt(long)]
     future_epochs: usize,
+    #[structopt(long)]
+    custom_rpc: Option<String>,
 }
 
 #[derive(StructOpt)]
@@ -573,7 +575,17 @@ async fn main() -> Result<(), anyhow::Error> {
             let minimum_beth_per_epoch = parse_ether(&mine_opt.min_beth_per_epoch)?;
             let maximum_beth_per_epoch = parse_ether(&mine_opt.max_beth_per_epoch)?;
             let addr = mine_opt.private_key.address();
-            let net = NETWORKS.get(&mine_opt.network).expect("Invalid network!");
+            let net = {
+                    let base = NETWORKS.get(&mine_opt.network).expect("Invalid network!");
+                    if let Some(custom_rpc) = &mine_opt.custom_rpc {
+                        Network {
+                            rpc: custom_rpc.parse().expect("Invalid custom RPC URL"),
+                            ..base.clone()
+                        }
+                    } else {
+                        base.clone()
+                    }
+                };
             let provider = ProviderBuilder::new()
                 .wallet(mine_opt.private_key)
                 .connect_http(net.rpc.clone());
