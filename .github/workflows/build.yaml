@@ -39,6 +39,10 @@ jobs:
         run: |
           make download_params WGET_ARGS=-q
 
+      - name: Install worm-miner
+        run: |
+          cargo install --path .
+
       - name: Burn!
         run: |
           . ~/.bashrc && worm-miner burn --network anvil --private-key 0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d --amount 1.0 --spend 1.0
