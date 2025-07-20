@@ -1,37 +1,18 @@
 use crate::fp::Fp;
 use alloy::{
-    // eips::BlockId,
-    // hex::ToHexExt,
-    // network::TransactionBuilder,
-    primitives::{
-        Address,
-        U256,
-        keccak256,
-        // map::HashMap,
-        // utils::{format_ether, parse_ether},
-    },
-    // providers::{Provider, ProviderBuilder},
+    primitives::{Address, U256, keccak256},
     rlp::RlpDecodable,
     rpc::types::EIP1186AccountProofResponse,
-    // signers::local::PrivateKeySigner,
-    // transports::http::reqwest,
 };
 use anyhow::anyhow;
 use serde_json::json;
-// mod fp;
-// mod poseidon2;
-use alloy::sol;
-// use std::{path::PathBuf, process::Command, time::Duration};
 
+use alloy::sol;
+
+use crate::poseidon2;
 use alloy_rlp::Decodable;
 use ff::{Field, PrimeField};
-// use fp::{Fp, FpRepr};
-use crate::poseidon2;
 use serde::{Deserialize, Serialize};
-// use structopt::StructOpt;
-// use worm_witness_gens::{generate_proof_of_burn_witness_file, rapidsnark};
-// pub mod networks;
-// use networks::{NETWORKS, Network};
 
 sol!(
     #[allow(missing_docs)]
