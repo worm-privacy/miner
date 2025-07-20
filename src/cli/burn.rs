@@ -1,23 +1,18 @@
 use structopt::StructOpt;
 
-use std::{path::PathBuf, process::Command, time::Duration};
+use std::process::Command;
 
-// use alloy_rlp::Decodable;
 use crate::fp::{Fp, FpRepr};
 use anyhow::anyhow;
-use ff::{Field, PrimeField};
-// use poseidon2::poseidon2;
-// use serde::{Deserialize, Serialize};
-// use serde_json::json;
-use crate::networks::{NETWORKS, Network};
+use ff::PrimeField;
+
+use crate::networks::NETWORKS;
 use crate::poseidon2::poseidon2;
 use crate::utils::{RapidsnarkOutput, find_burn_key, generate_burn_address, input_file};
 use alloy::rlp::Encodable;
-use worm_witness_gens::generate_proof_of_burn_witness_file;
-// use alloy::sol;
 use tempfile::tempdir;
 
-use crate::utils::{BETH, WORM};
+use crate::utils::BETH;
 
 use alloy::{
     eips::BlockId,
@@ -147,7 +142,7 @@ impl BurnOpt {
         block.header.inner.encode(&mut header_bytes);
         let proof = provider.get_proof(burn_addr, vec![]).await?;
 
-        let proof_dir = tempdir()?;
+        let _proof_dir = tempdir()?;
         let input_json_path = "input.json";
         let witness_path = "witness.wtns"; //proof_dir.path().join("witness.wtns");
 
