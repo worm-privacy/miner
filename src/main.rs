@@ -12,38 +12,39 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use structopt::StructOpt;
 use worm_witness_gens::{generate_proof_of_burn_witness_file, rapidsnark};
+mod networks;
+use network::{Network, NETWORKS};
+// #[derive(Debug, Clone)]
+// struct Network {
+//     rpc: reqwest::Url,
+//     beth: Address,
+//     worm: Address,
+// }
 
-#[derive(Debug, Clone)]
-struct Network {
-    rpc: reqwest::Url,
-    beth: Address,
-    worm: Address,
-}
-
-lazy_static::lazy_static! {
-    static ref NETWORKS: HashMap<String, Network> = {
-        [
-            (
-                "anvil".into(),
-                Network {
-                    rpc: "http://127.0.0.1:8545".parse().unwrap(),
-                    beth: address!("0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"),
-                    worm: address!("0x5b1869D9A4C187F2EAa108f3062412ecf0526b24"),
-                },
-            ),
-            (
-                "sepolia".into(),
-                Network {
-                    rpc: "https://sepolia.drpc.org".parse().unwrap(),
-                    beth: address!("0x6fa638704a839B28C5B7168C8916AdD9F75CDEEc"),
-                    worm: address!("0x557E9e7Eed905C7d21183Ec333dB2a8B1e34A85F"),
-                },
-            ),
-        ]
-        .into_iter()
-        .collect()
-    };
-}
+// lazy_static::lazy_static! {
+//     static ref NETWORKS: HashMap<String, Network> = {
+//         [
+//             (
+//                 "anvil".into(),
+//                 Network {
+//                     rpc: "http://127.0.0.1:8545".parse().unwrap(),
+//                     beth: address!("0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"),
+//                     worm: address!("0x5b1869D9A4C187F2EAa108f3062412ecf0526b24"),
+//                 },
+//             ),
+//             (
+//                 "sepolia".into(),
+//                 Network {
+//                     rpc: "https://sepolia.drpc.org".parse().unwrap(),
+//                     beth: address!("0x6fa638704a839B28C5B7168C8916AdD9F75CDEEc"),
+//                     worm: address!("0x557E9e7Eed905C7d21183Ec333dB2a8B1e34A85F"),
+//                 },
+//             ),
+//         ]
+//         .into_iter()
+//         .collect()
+//     };
+// }
 
 #[derive(StructOpt)]
 struct InfoOpt {
