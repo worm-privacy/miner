@@ -1,4 +1,4 @@
-use alloy::primitives::{address, Address};
+use alloy::primitives::{Address, address};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 
