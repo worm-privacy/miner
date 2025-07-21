@@ -141,7 +141,7 @@ impl BurnOpt {
         let proc_path = std::env::current_exe().expect("Failed to get current exe path");
 
         println!("Generating witness.wtns file at: {}", witness_path);
-        Command::new(&proc_path)
+        let output = Command::new(&proc_path)
             .arg("generate-witness")
             .arg("proof-of-burn")
             .arg("--input")
@@ -151,31 +151,45 @@ impl BurnOpt {
             .arg("--witness")
             .arg(witness_path)
             .output()?;
+        output.status.success().then_some(()).ok_or_else(|| {
+            anyhow!(
+                "Failed to generate witness file: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        })?;
 
         println!("Generating proof...");
-        let output: RapidsnarkOutput = serde_json::from_slice(
-            &Command::new(&proc_path)
+        let output = Command::new(&proc_path)
                 .arg("rapidsnark")
                 .arg("--zkey")
                 .arg(params_dir.join("proof_of_burn.zkey"))
                 .arg("--witness")
                 .arg(witness_path)
-                .output()?
-                .stdout,
-        )?;
+                .output()?;
+        
+        output.status.success().then_some(()).ok_or_else(|| {
+            anyhow!(
+                "Failed to generate proof: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        })?;
+        let json_output: RapidsnarkOutput = serde_json::from_slice(
+            &output.stdout
 
+        )?;
+        
         println!("Generated proof successfully! {:?}", output);
 
         println!("Broadcasting mint transaction...");
         let beth = BETH::new(net.beth, provider);
         let mint_receipt = beth
             .mintCoin(
-                [output.proof.pi_a[0], output.proof.pi_a[1]],
+                [json_output.proof.pi_a[0], json_output.proof.pi_a[1]],
                 [
-                    [output.proof.pi_b[0][1], output.proof.pi_b[0][0]],
-                    [output.proof.pi_b[1][1], output.proof.pi_b[1][0]],
+                    [json_output.proof.pi_b[0][1], json_output.proof.pi_b[0][0]],
+                    [json_output.proof.pi_b[1][1], json_output.proof.pi_b[1][0]],
                 ],
-                [output.proof.pi_c[0], output.proof.pi_c[1]],
+                [json_output.proof.pi_c[0], json_output.proof.pi_c[1]],
                 U256::from(block.header.number),
                 U256::from_le_bytes(nullifier.to_repr().0),
                 U256::from_le_bytes(remaining_coin.to_repr().0),
