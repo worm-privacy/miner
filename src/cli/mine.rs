@@ -7,9 +7,9 @@ use alloy::{
     },
     providers::{Provider, ProviderBuilder},
 };
+use anyhow::Result;
 use std::time::Duration;
 use structopt::StructOpt;
-use anyhow::{Result};
 
 #[derive(StructOpt)]
 pub struct MineOpt {
@@ -58,7 +58,7 @@ impl MineOpt {
             // userShare / (userShare + totalShare) * 50 * assumedWormPrice >= userShare
             // if totalShare > 0 => userShare = 50 * assumedWormPrice - totalShare
             // if totalShare = 0 => userShare = minimumBethPerEpoch
-            
+
             loop {
                 let result = async {
                     let epoch = worm.currentEpoch().call().await?;
@@ -147,7 +147,6 @@ impl MineOpt {
                     continue;
                 }
                 println!("Success! Continuing...");
-                
             }
         }
         Ok(())
