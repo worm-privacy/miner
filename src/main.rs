@@ -72,6 +72,6 @@ async fn main() -> Result<(), anyhow::Error> {
     let params_dir = homedir::my_home()?
         .ok_or(anyhow::anyhow!("Can't find user's home directory!"))?
         .join(".worm-miner");
-    let _ = MinerOpt::from_args().run(&params_dir).await;
+    MinerOpt::from_args().run(&params_dir).await?;
     Ok(())
 }
