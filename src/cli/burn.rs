@@ -190,6 +190,8 @@ impl BurnOpt {
 
         if mint_receipt.status() {
             println!("Success!");
+        } else {
+            println!("Transaction failed!");
         }
         Ok(())
     }

@@ -36,6 +36,8 @@ impl ClaimOpt {
             println!("Success!");
             let worm_balance = worm.balanceOf(addr).call().await?;
             println!("WORM balance: {}", format_ether(worm_balance));
+        } else {
+            println!("Transaction failed!");
         }
         Ok(())
     }

@@ -58,6 +58,8 @@ impl ParticipateOpt {
                 "Claim later by running: worm-miner claim --from-epoch {} --num-epochs {}",
                 epoch, self.num_epochs
             );
+        } else {
+            println!("Transaction failed!");
         }
         Ok(())
     }

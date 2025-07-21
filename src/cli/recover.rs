@@ -158,6 +158,8 @@ impl RecoverOpt {
 
         if mint_receipt.status() {
             println!("Success!");
+        } else {
+            println!("Transaction failed!");
         }
 
         Ok(())
