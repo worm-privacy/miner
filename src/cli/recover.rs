@@ -2,39 +2,32 @@ use structopt::StructOpt;
 
 use std::process::Command;
 
+use super::CommonOpt;
 use crate::fp::{Fp, FpRepr};
-use anyhow::anyhow;
-use ff::{Field, PrimeField};
-
-use crate::networks::NETWORKS;
 use crate::poseidon2::poseidon2;
+use crate::utils::BETH;
 use crate::utils::{RapidsnarkOutput, generate_burn_address, input_file};
 use alloy::rlp::Encodable;
-use tempfile::tempdir;
-
-use crate::utils::BETH;
-
 use alloy::{
     eips::BlockId,
     hex::ToHexExt,
     primitives::{B256, U256},
     providers::{Provider, ProviderBuilder},
-    signers::local::PrivateKeySigner,
 };
+use anyhow::anyhow;
+use ff::{Field, PrimeField};
 
 #[derive(StructOpt)]
 pub struct RecoverOpt {
-    #[structopt(long, default_value = "anvil")]
-    network: String,
-    #[structopt(long)]
-    private_key: PrivateKeySigner,
+    #[structopt(flatten)]
+    common_opt: CommonOpt,
     #[structopt(long)]
     burn_key: String,
 }
 
 impl RecoverOpt {
     pub async fn run(self, params_dir: &std::path::Path) -> Result<(), anyhow::Error> {
-        let net = NETWORKS.get(&self.network).expect("Invalid network!");
+        let net = self.common_opt.overridden_network()?;
 
         let required_files = [
             "proof_of_burn.dat",
@@ -53,10 +46,10 @@ impl RecoverOpt {
             }
         }
 
-        let wallet_addr = self.private_key.address();
+        let wallet_addr = self.common_opt.private_key.address();
 
         let provider = ProviderBuilder::new()
-            .wallet(self.private_key)
+            .wallet(self.common_opt.private_key)
             .connect_http(net.rpc.clone());
 
         if provider.get_code_at(net.beth).await?.0.is_empty() {

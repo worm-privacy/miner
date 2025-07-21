@@ -1,29 +1,23 @@
-use structopt::StructOpt;
-
-use crate::networks::NETWORKS;
-
 use crate::utils::{BETH, WORM};
-
+use structopt::StructOpt;
 use alloy::{
     primitives::{U256, utils::format_ether},
     providers::ProviderBuilder,
-    signers::local::PrivateKeySigner,
 };
+use super::CommonOpt;
 
 #[derive(StructOpt)]
 pub struct InfoOpt {
-    #[structopt(long, default_value = "anvil")]
-    network: String,
-    #[structopt(long)]
-    private_key: PrivateKeySigner,
+    #[structopt(flatten)]
+    common_opt: CommonOpt,
 }
 
 impl InfoOpt {
     pub async fn run(self) -> Result<(), anyhow::Error> {
-        let addr = self.private_key.address();
-        let net = NETWORKS.get(&self.network).expect("Invalid network!");
+        let addr = self.common_opt.private_key.address();
+        let net = self.common_opt.overridden_network()?;
         let provider = ProviderBuilder::new()
-            .wallet(self.private_key)
+            .wallet(self.common_opt.private_key)
             .connect_http(net.rpc.clone());
         let worm = WORM::new(net.worm, provider.clone());
         let beth = BETH::new(net.beth, provider.clone());

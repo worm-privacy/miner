@@ -1,26 +1,19 @@
 use structopt::StructOpt;
-
-use std::time::Duration;
-
-use crate::networks::{NETWORKS, Network};
-
 use crate::utils::{BETH, WORM};
-
+use std::time::Duration;
 use alloy::{
     primitives::{
         U256,
         utils::{format_ether, parse_ether},
     },
     providers::{Provider, ProviderBuilder},
-    signers::local::PrivateKeySigner,
 };
+use super::CommonOpt;
 
 #[derive(StructOpt)]
 pub struct MineOpt {
-    #[structopt(long, default_value = "anvil")]
-    network: String,
-    #[structopt(long)]
-    private_key: PrivateKeySigner,
+    #[structopt(flatten)]
+    common_opt: CommonOpt,
     #[structopt(long)]
     min_beth_per_epoch: String,
     #[structopt(long)]
@@ -29,8 +22,6 @@ pub struct MineOpt {
     assumed_worm_price: String,
     #[structopt(long)]
     future_epochs: usize,
-    #[structopt(long)]
-    custom_rpc: Option<String>,
 }
 
 impl MineOpt {
@@ -38,20 +29,10 @@ impl MineOpt {
         let assumed_worm_price = parse_ether(&self.assumed_worm_price)?;
         let minimum_beth_per_epoch = parse_ether(&self.min_beth_per_epoch)?;
         let maximum_beth_per_epoch = parse_ether(&self.max_beth_per_epoch)?;
-        let addr = self.private_key.address();
-        let net = {
-            let base = NETWORKS.get(&self.network).expect("Invalid network!");
-            if let Some(custom_rpc) = &self.custom_rpc {
-                Network {
-                    rpc: custom_rpc.parse().expect("Invalid custom RPC URL"),
-                    ..base.clone()
-                }
-            } else {
-                base.clone()
-            }
-        };
+        let addr = self.common_opt.private_key.address();
+        let net = self.common_opt.overridden_network()?;
         let provider = ProviderBuilder::new()
-            .wallet(self.private_key)
+            .wallet(self.common_opt.private_key)
             .connect_http(net.rpc.clone());
         let worm = WORM::new(net.worm, provider.clone());
         let beth = BETH::new(net.beth, provider.clone());

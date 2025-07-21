@@ -1,41 +1,29 @@
-use structopt::StructOpt;
-
-use std::process::Command;
-
+use super::CommonOpt;
 use crate::fp::{Fp, FpRepr};
-use anyhow::anyhow;
-use ff::PrimeField;
-
-use crate::networks::NETWORKS;
 use crate::poseidon2::poseidon2;
+use crate::utils::BETH;
 use crate::utils::{RapidsnarkOutput, find_burn_key, generate_burn_address, input_file};
 use alloy::rlp::Encodable;
-
-use crate::utils::BETH;
-
 use alloy::{
     eips::BlockId,
     hex::ToHexExt,
     network::TransactionBuilder,
     primitives::{
-        B256,
-        U256,
-        // map::HashMap,
+        B256, U256,
         utils::{format_ether, parse_ether},
     },
     providers::{Provider, ProviderBuilder},
-    // rlp::RlpDecodable,
     rpc::types::TransactionRequest,
-    signers::local::PrivateKeySigner,
-    // transports::http::reqwest,
 };
+use anyhow::anyhow;
+use ff::PrimeField;
+use std::process::Command;
+use structopt::StructOpt;
 
 #[derive(StructOpt)]
 pub struct BurnOpt {
-    #[structopt(long, default_value = "anvil")]
-    network: String,
-    #[structopt(long)]
-    private_key: PrivateKeySigner,
+    #[structopt(flatten)]
+    common_opt: CommonOpt,
     #[structopt(long)]
     amount: String,
     #[structopt(long, default_value = "0")]
@@ -46,7 +34,7 @@ pub struct BurnOpt {
 
 impl BurnOpt {
     pub async fn run(self, params_dir: &std::path::Path) -> Result<(), anyhow::Error> {
-        let net = NETWORKS.get(&self.network).expect("Invalid network!");
+        let net = self.common_opt.overridden_network()?;
 
         let required_files = [
             "proof_of_burn.dat",
@@ -79,10 +67,10 @@ impl BurnOpt {
             ));
         }
 
-        let wallet_addr = self.private_key.address();
+        let wallet_addr = self.common_opt.private_key.address();
 
         let provider = ProviderBuilder::new()
-            .wallet(self.private_key)
+            .wallet(self.common_opt.private_key)
             .connect_http(net.rpc.clone());
 
         if provider.get_code_at(net.beth).await?.0.is_empty() {
