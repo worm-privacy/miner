@@ -10,8 +10,10 @@ use structopt::StructOpt;
 pub struct ClaimOpt {
     #[structopt(flatten)]
     common_opt: CommonOpt,
-    #[structopt(long, default_value = "10")]
-    epochs_to_check: usize,
+    #[structopt(long)]
+    from_epoch: usize,
+    #[structopt(long)]
+    num_epochs: usize,
 }
 
 impl ClaimOpt {
@@ -23,12 +25,9 @@ impl ClaimOpt {
             .connect_http(net.rpc.clone());
         let worm = WORM::new(net.worm, provider.clone());
         let epoch = worm.currentEpoch().call().await?;
-        let num_epochs_to_check = std::cmp::min(epoch, U256::from(self.epochs_to_check));
+        let num_epochs = std::cmp::min(epoch, U256::from(self.num_epochs as u64));
         let receipt = worm
-            .claim(
-                epoch.saturating_sub(U256::from(num_epochs_to_check)),
-                num_epochs_to_check,
-            )
+            .claim(U256::from(self.from_epoch as u64), num_epochs)
             .send()
             .await?
             .get_receipt()

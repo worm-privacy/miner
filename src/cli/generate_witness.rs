@@ -1,5 +1,5 @@
-use structopt::StructOpt;
 use std::path::PathBuf;
+use structopt::StructOpt;
 use worm_witness_gens::generate_proof_of_burn_witness_file;
 
 #[derive(StructOpt)]

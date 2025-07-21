@@ -1,6 +1,5 @@
-use structopt::StructOpt;
+use super::CommonOpt;
 use crate::utils::{BETH, WORM};
-use std::time::Duration;
 use alloy::{
     primitives::{
         U256,
@@ -8,7 +7,8 @@ use alloy::{
     },
     providers::{Provider, ProviderBuilder},
 };
-use super::CommonOpt;
+use std::time::Duration;
+use structopt::StructOpt;
 
 #[derive(StructOpt)]
 pub struct MineOpt {

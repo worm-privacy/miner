@@ -1,10 +1,10 @@
+use super::CommonOpt;
 use crate::utils::{BETH, WORM};
-use structopt::StructOpt;
 use alloy::{
     primitives::{U256, utils::format_ether},
     providers::ProviderBuilder,
 };
-use super::CommonOpt;
+use structopt::StructOpt;
 
 #[derive(StructOpt)]
 pub struct InfoOpt {
