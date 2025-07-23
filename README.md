@@ -4,7 +4,7 @@ Test on Debian/Ubuntu systems:
 
 1. Install requirements:
    ```
-   sudo apt install -y build-essential cmake libgmp-dev libsodium-dev nasm curl m4 git wget unzip nlohmann-json3-dev
+   sudo apt install -y build-essential cmake libgmp-dev libsodium-dev nasm curl m4 git wget unzip nlohmann-json3-dev pkg-config libssl-dev libclang-dev
    ```
 3. Install Rust toolchain:
    ```
