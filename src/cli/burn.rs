@@ -1,5 +1,6 @@
 use super::CommonOpt;
-use crate::cli::utils::check_required_files;
+use crate::cli::utils::{check_required_files,
+    append_coin_entry, init_coins_file, coins_file, next_coin_id};
 use crate::fp::{Fp, FpRepr};
 use crate::poseidon2::poseidon2;
 use crate::utils::{RapidsnarkOutput, find_burn_key, generate_burn_address};
@@ -151,6 +152,21 @@ impl BurnOpt {
             .arg(witness_path)
             .output()?;
 
+        let coins_json_path = "coins.json";
+        let coins_path = params_dir.join(coins_json_path);
+        println!(
+            "Generating coins.json file at: {}",
+            coins_path.display()
+        );
+        init_coins_file(&coins_path)?;
+        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin_val.to_repr().0);
+
+        let next_id = next_coin_id(&coins_path)?;
+        let new_coin = coins_file(next_id, burn_key, remaining_coin_u256, &self.common_opt.network)?;
+        append_coin_entry(&coins_path, new_coin)?;
+        println!(
+            "New coin entry added",
+        );
         output.status.success().then_some(()).ok_or_else(|| {
             anyhow!(
                 "Failed to generate proof: {}",
