@@ -1,18 +1,7 @@
 [
     {
         "type": "constructor",
-        "inputs": [
-            {
-                "name": "_proofOfBurnVerifier",
-                "type": "address",
-                "internalType": "contract Verifier"
-            },
-            {
-                "name": "_spendVerifier",
-                "type": "address",
-                "internalType": "contract Verifier"
-            }
-        ],
+        "inputs": [],
         "stateMutability": "nonpayable"
     },
     {
@@ -194,6 +183,16 @@
                 "name": "_remainingCoin",
                 "type": "uint256",
                 "internalType": "uint256"
+            },
+            {
+                "name": "_fee",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "_receiver",
+                "type": "address",
+                "internalType": "address"
             }
         ],
         "outputs": [],
