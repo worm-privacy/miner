@@ -44,17 +44,8 @@ Test on Debian/Ubuntu systems:
    worm-miner mine --network anvil --private-key 0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d --amount-per-epoch 0.0001 --num-epochs 3 --claim-interval 3
    ```
    Where:
-      - `--amount-per-epoch` is the amount of BETH you will consume in each epoch.
-      - `--num-epochs` is the number of epochs you would like to participate in in advance.
-      - `--claim-interval` is the number of epochs you would like to wait before initiating WORM claims.
+      - `--min-beth-per-epoch` is the min amount of BETH you are willing to consume in order to participate in any block.
+      - `--max-beth-per-epoch` is the max amount of BETH you are willing to consume in order to participate in any block.
+      - `--assumed-worm-price` is your assumed WORM/ETH pair price.
+      - `--future-epochs` is the number of epochs you would like to participate in in advance.
       - `--custom-rpc` is an optional parameter that takes in an rpc-url.
-      
-20. Alternatively, you can participate in participate/claim process without running a live miner:
-    You first have to participate in epochs through the `participate` operation:
-    ```
-    worm-miner participate --network anvil --private-key 0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d --num-epochs 3 --amount-per-epoch 0.0001
-    ```
-    And then claim your WORM tokens later by running:
-    ```
-    worm-miner claim --private-key 0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d --from-epoch 0 --num-epochs 3
-    ```
