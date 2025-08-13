@@ -2,11 +2,13 @@ mod fp;
 mod poseidon2;
 
 use cli::RecoverOpt;
+
 use std::path::PathBuf;
 use structopt::StructOpt;
 pub mod cli;
 pub mod networks;
-use crate::cli::{BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, MineOpt, ParticipateOpt};
+
+use crate::cli::{BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, MineOpt, ParticipateOpt,LsOpt,SpendOpt};
 mod utils;
 use crate::utils::{RapidsnarkOutput, RapidsnarkProof};
 
@@ -15,6 +17,8 @@ use alloy::rlp::RlpDecodable;
 #[derive(StructOpt)]
 enum MinerOpt {
     Info(InfoOpt),
+    Ls(LsOpt),
+    Spend(SpendOpt),
     Participate(ParticipateOpt),
     Claim(ClaimOpt),
     Rapidsnark {
@@ -33,6 +37,8 @@ impl MinerOpt {
     pub async fn run(self, params_dir: &std::path::Path) -> Result<(), anyhow::Error> {
         match self {
             MinerOpt::Burn(cmd) => cmd.run(params_dir).await,
+            MinerOpt::Spend(cmd) => cmd.run(params_dir).await,
+            MinerOpt::Ls(cmd) => cmd.run(params_dir).await,
             MinerOpt::GenerateWitness(cmd) => cmd.run().await,
             MinerOpt::Info(cmd) => cmd.run().await,
             MinerOpt::Claim(cmd) => cmd.run().await,
@@ -56,7 +62,9 @@ impl MinerOpt {
 
                 Ok(())
             }
+
             MinerOpt::Recover(cmd) => cmd.run(params_dir).await,
+
         }
     }
 }
@@ -72,6 +80,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let params_dir = homedir::my_home()?
         .ok_or(anyhow::anyhow!("Can't find user's home directory!"))?
         .join(".worm-miner");
-    MinerOpt::from_args().run(&params_dir).await?;
+
+
+    match MinerOpt::from_args().run(&params_dir).await {
+        Ok(()) => {}
+        Err(e) => eprintln!("Error running command: {:?}", e),
+    }
+
     Ok(())
 }
