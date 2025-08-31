@@ -5,14 +5,16 @@ use std::process::Command;
 use super::CommonOpt;
 use crate::cli::utils::check_required_files;
 use crate::fp::{Fp, FpRepr};
-use crate::poseidon2::poseidon2;
+use crate::poseidon::{poseidon2,poseidon3};
 use crate::utils::{RapidsnarkOutput, generate_burn_address};
+use crate::constants::{poseidon_burn_address_prefix,poseidon_coin_prefix,poseidon_nullifier_prefix};
+
 use alloy::rlp::Encodable;
 use alloy::{
     eips::BlockId,
     hex::ToHexExt,
     primitives::{B256, U256},
-    providers::{Provider},
+    providers::Provider,
 };
 use anyhow::anyhow;
 use ff::{Field, PrimeField};
@@ -32,26 +34,27 @@ impl RecoverOpt {
         let net = runtime_context.network;
         let provider = runtime_context.provider;
         let wallet_addr = runtime_context.wallet_address;
-
+        let burn_addr_constant = poseidon_burn_address_prefix();
+        let nullifier_constant = poseidon_nullifier_prefix();
         println!("Generating a burn-key...");
         let burn_key = Fp::from_repr(FpRepr(
             U256::from_str_radix(&self.burn_key, 16)?.to_le_bytes(),
         ))
         .into_option()
         .ok_or(anyhow!("Cannot parse burn-key!"))?;
+        let fee = U256::ZERO;
 
-        let burn_addr = generate_burn_address(burn_key, wallet_addr);
-        let nullifier = poseidon2([burn_key, Fp::from(1)]);
+        let burn_addr = generate_burn_address(burn_addr_constant,burn_key, wallet_addr,fee);
+        let nullifier = poseidon2(nullifier_constant,burn_key );
 
         let burn_addr_balance = provider.get_balance(burn_addr).await?;
 
         if burn_addr_balance.is_zero() {
             panic!("No ETH is present in the burn address!");
         }
-        let fee = U256::ZERO;
         let spend = burn_addr_balance;
 
-        let remaining_coin = poseidon2([burn_key, Fp::ZERO]);
+        let remaining_coin = poseidon2(burn_key, Fp::ZERO);
 
         println!(
             "Your burn-key: {}",
