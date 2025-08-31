@@ -176,12 +176,12 @@ impl BurnOpt {
             )
         })?;
         let json_output: RapidsnarkOutput = serde_json::from_slice(&output.stdout)?;
-        println!("Generated proof successfully! {:?}", output);
+        println!("Generated proof successfully!");
 
         let nullifier_u256 = U256::from_le_bytes(nullifier.to_repr().0);
 
         println!("Broadcasting mint transaction...");
-        let _result = self
+        let result = self
             .common_opt
             .broadcast_mint(
                 &net,
@@ -195,7 +195,20 @@ impl BurnOpt {
                 wallet_addr,
             )
             .await;
-
+        match &result {
+            Ok(_) => {
+                println!(
+                    "broadcast_mint succeeded (block: {}, nullifier: {:?})",
+                    block.header.number, nullifier_u256,
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "broadcast_mint failed: {} (block: {}, nullifier: {:?})",
+                    e, block.header.number, nullifier_u256,
+                );
+            }
+        }
         Ok(())
     }
 }
