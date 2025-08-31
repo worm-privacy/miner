@@ -1,8 +1,6 @@
-use crate::constants::{
-    poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
-};
+use crate::constants::{poseidon_coin_prefix, poseidon_nullifier_prefix};
 use crate::fp::{Fp, FpRepr};
-use crate::poseidon::{poseidon2, poseidon3};
+use crate::poseidon::poseidon3;
 use crate::utils::RapidsnarkOutput;
 use alloy::primitives::Address;
 use alloy::rlp::Encodable;
@@ -201,8 +199,6 @@ impl SpendOpt {
             .arg(&witness_path)
             .output()
             .with_context(|| format!("Failed to run rapidsnark at {:?}", proc_path))?;
-
-       
 
         if !raw_output.status.success() {
             bail!("rapidsnark exited with non-zero status");
