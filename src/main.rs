@@ -1,5 +1,5 @@
 mod fp;
-mod poseidon2;
+mod poseidon;
 
 use cli::RecoverOpt;
 
@@ -7,8 +7,10 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 pub mod cli;
 pub mod networks;
-
-use crate::cli::{BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, MineOpt, ParticipateOpt,LsOpt,SpendOpt};
+pub mod constants;
+use crate::cli::{
+    BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, LsOpt, MineOpt, ParticipateOpt, SpendOpt,
+};
 mod utils;
 use crate::utils::{RapidsnarkOutput, RapidsnarkProof};
 
@@ -64,7 +66,6 @@ impl MinerOpt {
             }
 
             MinerOpt::Recover(cmd) => cmd.run(params_dir).await,
-
         }
     }
 }
@@ -81,7 +82,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .ok_or(anyhow::anyhow!("Can't find user's home directory!"))?
         .join(".worm-miner");
 
-
     match MinerOpt::from_args().run(&params_dir).await {
         Ok(()) => {}
         Err(e) => eprintln!("Error running command: {:?}", e),
@@ -89,3 +89,22 @@ async fn main() -> Result<(), anyhow::Error> {
 
     Ok(())
 }
+// #[tokio::main]
+// async fn main() {
+//     use fp::Fp;
+//     use poseidon::{poseidon3,poseidon4};
+
+//     let a = Fp::from(1u64);
+//     let b = Fp::from(2u64);
+//     let c = Fp::from(3u64);
+//     let d = Fp::from(4u64);
+
+//     // Call Poseidon hash
+//     let hash = poseidon3(a, b, c);
+//     let hash4 = poseidon4(a,b,c,d);
+//     // Print the result
+//     println!("Poseidon3 hash: {:?}", hash);
+//     println!("Poseidon4 hash: {:?}", hash4);
+//     // Optionally compare against known expected result
+//     // For now just check it's not zero
+// }
