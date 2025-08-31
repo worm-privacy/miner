@@ -1,3 +1,15 @@
+use crate::fp::{Fp,};
+use alloy::{
+   
+    primitives::{
+         U256,
+    },
+};
+use anyhow::{Context, Result};
+use ff::PrimeField;
+use serde_json::{Value, json};
+use std::{fs, path::Path};
+
 pub fn check_required_files(params_dir: &std::path::Path) -> Result<(), anyhow::Error> {
     let required_files = [
         "proof_of_burn.dat",
@@ -17,22 +29,6 @@ pub fn check_required_files(params_dir: &std::path::Path) -> Result<(), anyhow::
     }
     Ok(())
 }
-use alloy::{
-    eips::BlockId,
-    hex::ToHexExt,
-    network::TransactionBuilder,
-    primitives::{
-        B256, U256,
-        utils::{format_ether, parse_ether},
-    },
-
-};
-use ff::PrimeField;
-use crate::fp::{Fp, FpRepr};
-use anyhow::{Context, Result};
-use serde_json::{json, Value};
-use std::{fs, path::Path};
-use alloy::rlp::Encodable;
 
 pub fn coins_file(
     coin_id: U256,
@@ -48,7 +44,6 @@ pub fn coins_file(
     }))
 }
 
-
 pub fn next_coin_id<P: AsRef<Path>>(coins_path: P) -> Result<U256, anyhow::Error> {
     let path = coins_path.as_ref();
 
@@ -57,8 +52,8 @@ pub fn next_coin_id<P: AsRef<Path>>(coins_path: P) -> Result<U256, anyhow::Error
         return Ok(U256::from(1u64));
     }
 
-    let data = fs::read_to_string(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let data =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let json: Value = serde_json::from_str(&data)
         .with_context(|| format!("failed to parse {} as JSON", path.display()))?;
 
@@ -84,8 +79,8 @@ pub fn init_coins_file<P: AsRef<Path>>(coins_path: P) -> Result<(), anyhow::Erro
 
 pub fn append_coin_entry<P: AsRef<Path>>(coins_path: P, entry: Value) -> Result<(), anyhow::Error> {
     let path = coins_path.as_ref();
-    let data = fs::read_to_string(path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let data =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let mut json_val: Value = serde_json::from_str(&data)
         .with_context(|| format!("{} was not valid JSON", path.display()))?;
     let arr = json_val
@@ -94,7 +89,6 @@ pub fn append_coin_entry<P: AsRef<Path>>(coins_path: P, entry: Value) -> Result<
     arr.push(entry);
     let pretty = serde_json::to_string_pretty(&json_val)
         .with_context(|| "failed to serialize updated JSON")?;
-    fs::write(path, pretty)
-        .with_context(|| format!("failed to write {}", path.display()))?;
+    fs::write(path, pretty).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }

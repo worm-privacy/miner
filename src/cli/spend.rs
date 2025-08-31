@@ -1,43 +1,30 @@
-use alloy::network::any;
-use structopt::StructOpt;
-
-use std::process::Command;
-
 use crate::fp::{Fp, FpRepr};
-use anyhow::{anyhow, Ok};
-use ff::PrimeField;
-use std::io::{self, Write};
-use serde_json::Value;
-use crate::networks::NETWORKS;
-use crate::poseidon2::poseidon2;
-use crate::utils::{RapidsnarkOutput, find_burn_key, generate_burn_address, input_file};
+use crate::poseidon::{poseidon2,poseidon3};
+use crate::utils::RapidsnarkOutput;
+use alloy::primitives::Address;
 use alloy::rlp::Encodable;
-use tempfile::tempdir;
-use std::{fs, path::Path};
-use crate::cli::utils::check_required_files;
+use anyhow::{Context, bail};
+use std::str::FromStr;
+use crate::constants::{poseidon_burn_address_prefix,poseidon_coin_prefix,poseidon_nullifier_prefix};
 
+use super::CommonOpt;
+use crate::cli::utils::{
+    append_coin_entry, check_required_files, coins_file, init_coins_file, next_coin_id
+};
 use crate::utils::BETH;
-
 use alloy::{
     eips::BlockId,
-    hex::ToHexExt,
-    network::TransactionBuilder,
-    primitives::{
-        B256,
-        U256,
-        // map::HashMap,
-        utils::{format_ether, parse_ether},
-    },
-    providers::{Provider, ProviderBuilder},
-    // rlp::RlpDecodable,
-    rpc::types::TransactionRequest,
-    signers::local::PrivateKeySigner,
-    // transports::http::reqwest,
+    primitives::{U256, utils::parse_ether},
+    providers::Provider,
 };
-use anyhow::{bail, Context, Result};
-use super::CommonOpt;
+use anyhow::Result;
+use anyhow::{Ok, anyhow};
+use ff::PrimeField;
+use serde_json::Value;
+use std::fs;
 
-
+use std::process::Command;
+use structopt::StructOpt;
 
 #[derive(StructOpt)]
 pub struct SpendOpt {
@@ -48,85 +35,56 @@ pub struct SpendOpt {
     #[structopt(long)]
     amount: String,
     #[structopt(long)]
-    fee:String,
-  
+    fee: String,
+    #[structopt(long)]
+    receiver: Address,
 }
 
-// fn prompt_line(prompt: &str) -> Result<String> {
-//     print!("{prompt}");
-//     io::stdout().flush().ok();
-//     let mut s = String::new();
-//     io::stdin().read_line(&mut s).context("failed to read from stdin")?;
-//     Ok(s.trim().to_owned())
-// }
-// fn parse_u256_any(s: &str) -> Result<U256> {
-//     let s = s.trim();
-//     if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-//         let bytes = hex::decode(hex).context("invalid hex for U256")?;
-//         if bytes.len() > 32 {
-//             bail!("hex too long for U256 ({} bytes)", bytes.len());
-//         }
-//         let mut be = [0u8; 32];
-//         be[32 - bytes.len()..].copy_from_slice(&bytes); // left-pad
-//         Ok(U256::from_big_endian(&be))
-//     } else {
-//         U256::from_dec_str(s).context("invalid decimal for U256")
-//     }
-// }
 impl SpendOpt {
     pub async fn run(self, params_dir: &std::path::Path) -> Result<(), anyhow::Error> {
-        // let net = NETWORKS.get(&self.network).expect("Invalid network!");
-        // let required_files = [
-        //     "proof_of_burn.dat",
-        //     "proof_of_burn.zkey",
-        //     "spend.dat",
-        //     "spend.zkey",
-        // ];
-
-        // for req_file in required_files {
-        //     let full_path = params_dir.join(req_file);
-        //     if !std::fs::exists(&full_path)? {
-        //         panic!(
-        //             "File {} does not exist! Make sure you have downloaded all required files through `make download_params`!",
-        //             full_path.display()
-        //         );
-        //     }
-        // }
-
-        // let provider = ProviderBuilder::new()
-        //     .wallet(&self.private_key)
-        //     .connect_http(net.rpc.clone());
+        println!("starting spend operation...");
         check_required_files(params_dir)?;
         let runtime_context = self.common_opt.setup().await?;
         let net = runtime_context.network;
         let provider = runtime_context.provider;
-        let wallet_addr = runtime_context.wallet_address;
+        let input_json_path = "spend_input.json";
+        let witness_path = "spend_witness.wtns";
+        let coins_json_path = "coins.json";
+        let zkey_path = params_dir.join("spend.zkey");
+        let coins_path = params_dir.join(coins_json_path);
+        let coin_constant = poseidon_coin_prefix();
         // 1.get burn key from coins.json
-        println!("✓ burn-key id = {}", &self.id);
-        println!("✓ amount      = {}", &self.amount);
-        println!("✓ fee         = {}", &self.fee);
-        let coins_path = params_dir.join("coins.json");
+        
         if !coins_path.exists() {
             println!("No coins.json found at {}", coins_path.display());
             return Ok(());
         }
         let data = fs::read_to_string(&coins_path)
-        .with_context(|| format!("failed to read {}", coins_path.display()))?;
+            .with_context(|| format!("failed to read {}", coins_path.display()))?;
 
         let json: Value = serde_json::from_str(&data)
-        .with_context(|| format!("failed to parse {} as JSON", coins_path.display()))?;
+            .with_context(|| format!("failed to parse {} as JSON", coins_path.display()))?;
 
-        let arr = json.as_array()
-        .with_context(|| format!("expected {} to be a JSON array", coins_path.display()))?;
+        let arr = json
+            .as_array()
+            .with_context(|| format!("expected {} to be a JSON array", coins_path.display()))?;
 
-        let coin = arr.iter().find(|obj|{
-            obj.get("id").map_or(false,|v| match v{
-                Value::String(s)=> s == &self.id,
-                Value::Number(n)=> n.to_string() == self.id,
-                _ => false,
-
+        let coin = arr
+            .iter()
+            .find(|obj| {
+                obj.get("id").map_or(false, |v| match v {
+                    Value::String(s) => s == &self.id,
+                    Value::Number(n) => n.to_string() == self.id,
+                    _ => false,
+                })
             })
-        }).ok_or_else(|| anyhow!("no coin with id {} found in {}", self.id, coins_path.display()))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "no coin with id {} found in {}",
+                    self.id,
+                    coins_path.display()
+                )
+            })?;
         println!("{}", serde_json::to_string_pretty(coin)?);
         let burn_key = match coin.get("burnKey") {
             Some(Value::String(key)) => key.clone(),
@@ -134,35 +92,50 @@ impl SpendOpt {
         };
         /*
 
-             2. get previous coin
+            2. generate previous coin
 
 
-         */
+        */
         let original_amount = match coin.get("amount") {
             Some(Value::String(amount)) => amount.clone(),
             _ => bail!("amount not found in the coin object"),
         };
-        let original_amount_u256 = parse_ether(&original_amount)?;
-        println!("✓ burn-key = {}", burn_key);
-         /*
+        let original_amount_u256 = U256::from_str(&original_amount).expect("Invalid U256 string");
+        let burn_key_fp = Fp::from_str_vartime(&burn_key.to_string()).unwrap();
+        let previous_coin_val =
+            Fp::from_repr(FpRepr(original_amount_u256.to_le_bytes::<32>())).unwrap();
+        println!("xxxx{:?}", [coin_constant,burn_key_fp, previous_coin_val]);
+        let previous_coin = poseidon3(coin_constant,burn_key_fp, previous_coin_val);
+        println!("final hash:{:?}",previous_coin);
+        let previous_coin_u256 = U256::from_le_bytes(previous_coin.to_repr().0);
+        /*
 
-            3. compare prevous coin amount with new amount and fee
+          3. compare prevous coin amount with new amount and fee
 
-            
-          */
+
+        */
+        
         let fee = parse_ether(&self.fee)?;
         let amount = parse_ether(&self.amount)?;
-        if amount + fee > parse_ether(&original_amount)? {
+        if amount + fee > original_amount_u256 {
             return Err(anyhow!(
                 "Sum of --fee and --amount should be less than the original amount!"
             ));
         }
-        let burnkey = Fp::from_str_vartime(&burn_key.to_string()).unwrap();
-        
-        let remaining_coin_val = Fp::from_repr(FpRepr((original_amount_u256 - fee - amount).to_le_bytes::<32>())).unwrap();
-        let remaining_coin = poseidon2([burnkey, remaining_coin_val]);
         /*
-                    4. generate new proof
+
+          4. generate remaining coin
+
+        */
+        let remaining_coin_val = Fp::from_repr(FpRepr(
+            (original_amount_u256 - fee - amount).to_le_bytes::<32>(),
+        ))
+        .unwrap();
+
+        let remaining_coin = poseidon3(coin_constant,burn_key_fp, remaining_coin_val);
+        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
+        /*
+          5. generate input.json file
         */
         let block = provider
             .get_block(BlockId::latest())
@@ -171,18 +144,27 @@ impl SpendOpt {
 
         let mut header_bytes = Vec::new();
         block.header.inner.encode(&mut header_bytes);
-        let _proof_dir = tempdir()?;
-        let input_json_path = "input.json";
-        let witness_path = "witness.wtns"; //proof_dir.path().join("witness.wtns");
-
-
-
+        
+        println!("Generating input.json file at: {}", input_json_path);
+        self.common_opt
+            .write_spend_input_json(
+                burn_key_fp,
+                &original_amount_u256.to_string(),
+                &amount.to_string(),
+                &self.receiver.to_string(),
+                &fee.to_string(),
+                &input_json_path,
+            )
+            .await?;
+        /*
+          6. generate witness.wtns file
+        */
         let proc_path = std::env::current_exe().expect("Failed to get current exe path");
 
         println!("Generating witness.wtns file at: {}", witness_path);
-        Command::new(&proc_path)
+        let witness_output = Command::new(&proc_path)
             .arg("generate-witness")
-            .arg("proof-of-burn")
+            .arg("spend")
             .arg("--input")
             .arg(input_json_path)
             .arg("--dat")
@@ -190,44 +172,107 @@ impl SpendOpt {
             .arg("--witness")
             .arg(witness_path)
             .output()?;
+        println!("stdout:\n{}", String::from_utf8_lossy(&witness_output.stdout));
+        eprintln!("stderr:\n{}", String::from_utf8_lossy(&witness_output.stderr));
+        if !witness_output.status.success() {
+            return Err(anyhow::anyhow!(
+                "generate-witness failed with exit code: {}",
+                witness_output.status.code().unwrap_or(-1)
+            ));
+        }
 
+        /*
+          7. generate proof
+        */
         println!("Generating proof...");
-        let output: RapidsnarkOutput = serde_json::from_slice(
-            &Command::new(&proc_path)
-                .arg("rapidsnark")
-                .arg("--zkey")
-                .arg(params_dir.join("spend.zkey"))
-                .arg("--witness")
-                .arg(witness_path)
-                .output()?
-                .stdout,
-        )?;
-
-        println!("Generated proof successfully! {:?}", output);
-        // 5. broadcast spend transaction 
-        let beth = BETH::new(net.beth, provider);
-        // let spend_receipt = beth
-        //     .spendCoin(
-        //         [output.proof.pi_a[0], output.proof.pi_a[1]],
-        //         [
-        //             [output.proof.pi_b[0][1], output.proof.pi_b[0][0]],
-        //             [output.proof.pi_b[1][1], output.proof.pi_b[1][0]],
-        //         ],
-        //         [output.proof.pi_c[0], output.proof.pi_c[1]],
-        //         U256::from(block.header.number),
-        //         U256::from_le_bytes(nullifier.to_repr().0),
-        //         U256::from_le_bytes(remaining_coin.to_repr().0),
-        //         fee,
-        //         spend,
-        //         wallet_addr,
-        //     )
-        //     .send()
-        //     .await?
-        //     .get_receipt()
-        //     .await?;
         
-        // 6. check spend transaction status
+        let raw_output = Command::new(&proc_path)
+            .arg("rapidsnark")
+            .arg("--zkey")
+            .arg(&zkey_path)
+            .arg("--witness")
+            .arg(&witness_path)
+            .output()
+            .with_context(|| format!("Failed to run rapidsnark at {:?}", proc_path))?;
+    
+        println!("[rapidsnark] status: {}", raw_output.status);
+        println!(
+            "[rapidsnark] stdout:\n{}",
+            String::from_utf8_lossy(&raw_output.stdout)
+        );
+        println!(
+            "[rapidsnark] stderr:\n{}",
+            String::from_utf8_lossy(&raw_output.stderr)
+        );
+
+        if !raw_output.status.success() {
+            bail!("rapidsnark exited with non-zero status");
+        }
+
+        if raw_output.stdout.is_empty() {
+            bail!("rapidsnark stdout was empty — cannot parse JSON");
+        }
+        let stdout_str = String::from_utf8_lossy(&raw_output.stdout);
+
+        let output: RapidsnarkOutput =
+            serde_json::from_slice(&raw_output.stdout).with_context(|| {
+                format!(
+                    "Failed to deserialize rapidsnark output as RapidsnarkOutput:\n{}",
+                    stdout_str
+                )
+            })?;
+        
+        
+        println!("Generated proof successfully! {:?}", &output);
+        /*
+          8. send spend transaction
+        */
+        let beth = BETH::new(net.beth, provider);
+        let spend_receipt = beth
+            .spendCoin(
+                [output.proof.pi_a[0], output.proof.pi_a[1]],
+                [
+                    [output.proof.pi_b[0][1], output.proof.pi_b[0][0]],
+                    [output.proof.pi_b[1][1], output.proof.pi_b[1][0]],
+                ],
+                [output.proof.pi_c[0], output.proof.pi_c[1]],
+                previous_coin_u256,
+                amount,
+                remaining_coin_u256,
+                fee,
+                self.receiver,
+            )
+            .send()
+            .await?
+            .get_receipt()
+            .await?;
+        println!(
+            "Spend transaction broadcasted successfully! Receipt: {:?}",
+            spend_receipt
+        );
+        if !spend_receipt.status() {
+            bail!(
+                "Spend transaction failed with status: {:?}",
+                spend_receipt.status()
+            );
+        }
+        println!("✓ Spend transaction successful!");
+        /*
+            9. update coins.json
+         */        
+        init_coins_file(&coins_path)?;
+        let remaining_coin_str = U256::from_le_bytes(remaining_coin_val.to_repr().0);
         // 7. update coins.json
+        let next_id = next_coin_id(&coins_path)?;
+        let new_coin = coins_file(
+            next_id,
+            burn_key_fp,
+            remaining_coin_str,
+            &self.common_opt.network,
+        )?;
+        append_coin_entry(&coins_path, new_coin)?;
+        println!("New coin entry added",);
+        
         Ok(())
     }
 }
