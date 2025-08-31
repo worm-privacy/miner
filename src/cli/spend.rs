@@ -106,7 +106,7 @@ impl SpendOpt {
         let burn_key_fp = Fp::from_str_vartime(&burn_key.to_string()).unwrap();
         let previous_coin_val =
             Fp::from_repr(FpRepr(original_amount_u256.to_le_bytes::<32>())).unwrap();
-        
+
         let previous_coin = poseidon3(coin_constant, burn_key_fp, previous_coin_val);
         let previous_coin_u256 = U256::from_le_bytes(previous_coin.to_repr().0);
         /*
@@ -202,15 +202,7 @@ impl SpendOpt {
             .output()
             .with_context(|| format!("Failed to run rapidsnark at {:?}", proc_path))?;
 
-        println!("[rapidsnark] status: {}", raw_output.status);
-        println!(
-            "[rapidsnark] stdout:\n{}",
-            String::from_utf8_lossy(&raw_output.stdout)
-        );
-        println!(
-            "[rapidsnark] stderr:\n{}",
-            String::from_utf8_lossy(&raw_output.stderr)
-        );
+       
 
         if !raw_output.status.success() {
             bail!("rapidsnark exited with non-zero status");
@@ -229,7 +221,7 @@ impl SpendOpt {
                 )
             })?;
 
-        println!("Generated proof successfully! {:?}", &output);
+        println!("Generated proof successfully!");
         /*
           8. send spend transaction
         */
