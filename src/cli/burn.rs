@@ -1,8 +1,10 @@
 use super::CommonOpt;
-use crate::cli::utils::{check_required_files,
-    append_coin_entry, init_coins_file, coins_file, next_coin_id};
+use crate::cli::utils::{
+    append_coin_entry, check_required_files, coins_file, init_coins_file, next_coin_id,
+};
+use crate::constants::{poseidon_burn_address_prefix,poseidon_coin_prefix,poseidon_nullifier_prefix};
 use crate::fp::{Fp, FpRepr};
-use crate::poseidon2::poseidon2;
+use crate::poseidon::{poseidon2,poseidon3};
 use crate::utils::{RapidsnarkOutput, find_burn_key, generate_burn_address};
 use alloy::rlp::Encodable;
 use alloy::{
@@ -40,7 +42,9 @@ impl BurnOpt {
         let net = runtime_context.network;
         let provider = runtime_context.provider;
         let wallet_addr = runtime_context.wallet_address;
-
+        let burn_addr_constant = poseidon_burn_address_prefix();
+        let nullifier_constant = poseidon_nullifier_prefix();
+        let coin_constant = poseidon_coin_prefix();
         let fee = parse_ether(&self.fee)?;
         let spend = parse_ether(&self.spend)?;
         let amount = parse_ether(&self.amount)?;
@@ -56,14 +60,18 @@ impl BurnOpt {
         }
 
         println!("Generating a burn-key...");
-        let burn_key = find_burn_key(3);
+        let burn_key = find_burn_key(3,wallet_addr,fee);
 
-        let burn_addr = generate_burn_address(burn_key, wallet_addr);
-        let nullifier = poseidon2([burn_key, Fp::from(1)]);
+        let burn_addr = generate_burn_address(burn_addr_constant,burn_key, wallet_addr,fee);
+        let nullifier = poseidon2(nullifier_constant,burn_key);
 
         let remaining_coin_val =
             Fp::from_repr(FpRepr((amount - fee - spend).to_le_bytes::<32>())).unwrap();
-        let remaining_coin = poseidon2([burn_key, remaining_coin_val]);
+        println!("Remaining coin value: {}", amount - fee - spend);
+        println!("xxxxx{:?}", [coin_constant,burn_key, remaining_coin_val]);
+        let remaining_coin = poseidon3(coin_constant,burn_key, remaining_coin_val);
+        println!("final hash: {:?}",remaining_coin);
+        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
 
         println!(
             "Your burn-key: {}",
@@ -154,19 +162,19 @@ impl BurnOpt {
 
         let coins_json_path = "coins.json";
         let coins_path = params_dir.join(coins_json_path);
-        println!(
-            "Generating coins.json file at: {}",
-            coins_path.display()
-        );
+        println!("Generating coins.json file at: {}", coins_path.display());
         init_coins_file(&coins_path)?;
-        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin_val.to_repr().0);
+        let remaining_coin_str = U256::from_le_bytes(remaining_coin_val.to_repr().0);
 
         let next_id = next_coin_id(&coins_path)?;
-        let new_coin = coins_file(next_id, burn_key, remaining_coin_u256, &self.common_opt.network)?;
+        let new_coin = coins_file(
+            next_id,
+            burn_key,
+            remaining_coin_str,
+            &self.common_opt.network,
+        )?;
         append_coin_entry(&coins_path, new_coin)?;
-        println!(
-            "New coin entry added",
-        );
+        println!("New coin entry added",);
         output.status.success().then_some(()).ok_or_else(|| {
             anyhow!(
                 "Failed to generate proof: {}",
@@ -177,8 +185,8 @@ impl BurnOpt {
         println!("Generated proof successfully! {:?}", output);
 
         let nullifier_u256 = U256::from_le_bytes(nullifier.to_repr().0);
-        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
 
+        println!("The remainig coin u256 is {}", remaining_coin_u256);
         println!("Broadcasting mint transaction...");
         let _result = self
             .common_opt
