@@ -139,7 +139,6 @@ impl CommonOpt {
         wallet_addr: Address,
         input_path: impl AsRef<Path>,
     ) -> Result<()> {
-    
         let proof = provider.get_proof(burn_addr, vec![]).await?;
         let json = input_file(proof, header_bytes, burn_key, fee, spend, wallet_addr)?.to_string();
         let path = input_path.as_ref();
