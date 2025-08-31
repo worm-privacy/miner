@@ -9,7 +9,7 @@ use serde_json::json;
 
 use alloy::sol;
 
-use crate::poseidon2;
+use crate::poseidon;
 use alloy_rlp::Decodable;
 use ff::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
@@ -42,12 +42,14 @@ pub struct RapidsnarkOutput {
     pub public: Vec<U256>,
 }
 
-pub fn find_burn_key(pow_min_zero_bytes: usize) -> Fp {
+pub fn find_burn_key(pow_min_zero_bytes: usize,receiver_addr: Address,fee: U256) -> Fp {
     let mut curr: U256 = U256::from_le_bytes(Fp::random(ff::derive::rand_core::OsRng).to_repr().0);
     loop {
-        let mut inp: [u8; 40] = [0; 40];
+        let mut inp: [u8; 92] = [0; 92];
         inp[..32].copy_from_slice(&curr.to_be_bytes::<32>());
-        inp[32..].copy_from_slice(b"EIP-7503");
+        inp[32..52].copy_from_slice(&receiver_addr.as_slice());
+        inp[52..84].copy_from_slice(&fee.to_be_bytes::<32>());
+        inp[84..].copy_from_slice(b"EIP-7503");
         let hash: U256 = keccak256(inp).into();
         if hash.leading_zeros() >= pow_min_zero_bytes * 8 {
             return Fp::from_be_bytes(&curr.to_be_bytes::<32>());
@@ -56,9 +58,12 @@ pub fn find_burn_key(pow_min_zero_bytes: usize) -> Fp {
     }
 }
 
-pub fn generate_burn_address(burn_key: Fp, receiver: Address) -> Address {
+pub fn generate_burn_address(burn_addr_constant:Fp,burn_key: Fp, receiver: Address,fee: U256) -> Address {
     let receiver_fp = Fp::from_be_bytes(receiver.as_slice());
-    let hash = poseidon2::poseidon2([burn_key, receiver_fp]);
+    let fee_be: [u8; 32] = fee.to_be_bytes();
+    let fee_fp = Fp::from_be_bytes(&fee_be);
+    // println!("fee_fp: {:?}", fee_fp);
+    let hash = poseidon::poseidon4(burn_addr_constant,burn_key, receiver_fp,fee_fp);
     let mut hash_be = hash.to_repr().0[12..32].to_vec();
     hash_be.reverse();
     Address::from_slice(&hash_be)
