@@ -6,8 +6,8 @@ use cli::RecoverOpt;
 use std::path::PathBuf;
 use structopt::StructOpt;
 pub mod cli;
-pub mod networks;
 pub mod constants;
+pub mod networks;
 use crate::cli::{
     BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, LsOpt, MineOpt, ParticipateOpt, SpendOpt,
 };
@@ -89,22 +89,3 @@ async fn main() -> Result<(), anyhow::Error> {
 
     Ok(())
 }
-// #[tokio::main]
-// async fn main() {
-//     use fp::Fp;
-//     use poseidon::{poseidon3,poseidon4};
-
-//     let a = Fp::from(1u64);
-//     let b = Fp::from(2u64);
-//     let c = Fp::from(3u64);
-//     let d = Fp::from(4u64);
-
-//     // Call Poseidon hash
-//     let hash = poseidon3(a, b, c);
-//     let hash4 = poseidon4(a,b,c,d);
-//     // Print the result
-//     println!("Poseidon3 hash: {:?}", hash);
-//     println!("Poseidon4 hash: {:?}", hash4);
-//     // Optionally compare against known expected result
-//     // For now just check it's not zero
-// }

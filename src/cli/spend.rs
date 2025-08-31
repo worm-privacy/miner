@@ -1,15 +1,17 @@
+use crate::constants::{
+    poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
+};
 use crate::fp::{Fp, FpRepr};
-use crate::poseidon::{poseidon2,poseidon3};
+use crate::poseidon::{poseidon2, poseidon3};
 use crate::utils::RapidsnarkOutput;
 use alloy::primitives::Address;
 use alloy::rlp::Encodable;
 use anyhow::{Context, bail};
 use std::str::FromStr;
-use crate::constants::{poseidon_burn_address_prefix,poseidon_coin_prefix,poseidon_nullifier_prefix};
 
 use super::CommonOpt;
 use crate::cli::utils::{
-    append_coin_entry, check_required_files, coins_file, init_coins_file, next_coin_id
+    append_coin_entry, check_required_files, coins_file, init_coins_file, next_coin_id,
 };
 use crate::utils::BETH;
 use alloy::{
@@ -54,7 +56,7 @@ impl SpendOpt {
         let coins_path = params_dir.join(coins_json_path);
         let coin_constant = poseidon_coin_prefix();
         // 1.get burn key from coins.json
-        
+
         if !coins_path.exists() {
             println!("No coins.json found at {}", coins_path.display());
             return Ok(());
@@ -104,9 +106,8 @@ impl SpendOpt {
         let burn_key_fp = Fp::from_str_vartime(&burn_key.to_string()).unwrap();
         let previous_coin_val =
             Fp::from_repr(FpRepr(original_amount_u256.to_le_bytes::<32>())).unwrap();
-        println!("xxxx{:?}", [coin_constant,burn_key_fp, previous_coin_val]);
-        let previous_coin = poseidon3(coin_constant,burn_key_fp, previous_coin_val);
-        println!("final hash:{:?}",previous_coin);
+        
+        let previous_coin = poseidon3(coin_constant, burn_key_fp, previous_coin_val);
         let previous_coin_u256 = U256::from_le_bytes(previous_coin.to_repr().0);
         /*
 
@@ -114,7 +115,7 @@ impl SpendOpt {
 
 
         */
-        
+
         let fee = parse_ether(&self.fee)?;
         let amount = parse_ether(&self.amount)?;
         if amount + fee > original_amount_u256 {
@@ -132,7 +133,7 @@ impl SpendOpt {
         ))
         .unwrap();
 
-        let remaining_coin = poseidon3(coin_constant,burn_key_fp, remaining_coin_val);
+        let remaining_coin = poseidon3(coin_constant, burn_key_fp, remaining_coin_val);
         let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
         /*
           5. generate input.json file
@@ -144,7 +145,7 @@ impl SpendOpt {
 
         let mut header_bytes = Vec::new();
         block.header.inner.encode(&mut header_bytes);
-        
+
         println!("Generating input.json file at: {}", input_json_path);
         self.common_opt
             .write_spend_input_json(
@@ -172,8 +173,14 @@ impl SpendOpt {
             .arg("--witness")
             .arg(witness_path)
             .output()?;
-        println!("stdout:\n{}", String::from_utf8_lossy(&witness_output.stdout));
-        eprintln!("stderr:\n{}", String::from_utf8_lossy(&witness_output.stderr));
+        println!(
+            "stdout:\n{}",
+            String::from_utf8_lossy(&witness_output.stdout)
+        );
+        eprintln!(
+            "stderr:\n{}",
+            String::from_utf8_lossy(&witness_output.stderr)
+        );
         if !witness_output.status.success() {
             return Err(anyhow::anyhow!(
                 "generate-witness failed with exit code: {}",
@@ -185,7 +192,7 @@ impl SpendOpt {
           7. generate proof
         */
         println!("Generating proof...");
-        
+
         let raw_output = Command::new(&proc_path)
             .arg("rapidsnark")
             .arg("--zkey")
@@ -194,7 +201,7 @@ impl SpendOpt {
             .arg(&witness_path)
             .output()
             .with_context(|| format!("Failed to run rapidsnark at {:?}", proc_path))?;
-    
+
         println!("[rapidsnark] status: {}", raw_output.status);
         println!(
             "[rapidsnark] stdout:\n{}",
@@ -221,8 +228,7 @@ impl SpendOpt {
                     stdout_str
                 )
             })?;
-        
-        
+
         println!("Generated proof successfully! {:?}", &output);
         /*
           8. send spend transaction
@@ -258,8 +264,8 @@ impl SpendOpt {
         }
         println!("✓ Spend transaction successful!");
         /*
-            9. update coins.json
-         */        
+           9. update coins.json
+        */
         init_coins_file(&coins_path)?;
         let remaining_coin_str = U256::from_le_bytes(remaining_coin_val.to_repr().0);
         // 7. update coins.json
@@ -272,7 +278,7 @@ impl SpendOpt {
         )?;
         append_coin_entry(&coins_path, new_coin)?;
         println!("New coin entry added",);
-        
+
         Ok(())
     }
 }

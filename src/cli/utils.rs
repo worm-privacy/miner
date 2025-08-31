@@ -1,10 +1,5 @@
-use crate::fp::{Fp,};
-use alloy::{
-   
-    primitives::{
-         U256,
-    },
-};
+use crate::fp::Fp;
+use alloy::primitives::U256;
 use anyhow::{Context, Result};
 use ff::PrimeField;
 use serde_json::{Value, json};

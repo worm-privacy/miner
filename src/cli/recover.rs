@@ -4,10 +4,12 @@ use std::process::Command;
 
 use super::CommonOpt;
 use crate::cli::utils::check_required_files;
+use crate::constants::{
+    poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
+};
 use crate::fp::{Fp, FpRepr};
-use crate::poseidon::{poseidon2,poseidon3};
+use crate::poseidon::{poseidon2, poseidon3};
 use crate::utils::{RapidsnarkOutput, generate_burn_address};
-use crate::constants::{poseidon_burn_address_prefix,poseidon_coin_prefix,poseidon_nullifier_prefix};
 
 use alloy::rlp::Encodable;
 use alloy::{
@@ -44,8 +46,8 @@ impl RecoverOpt {
         .ok_or(anyhow!("Cannot parse burn-key!"))?;
         let fee = U256::ZERO;
 
-        let burn_addr = generate_burn_address(burn_addr_constant,burn_key, wallet_addr,fee);
-        let nullifier = poseidon2(nullifier_constant,burn_key );
+        let burn_addr = generate_burn_address(burn_addr_constant, burn_key, wallet_addr, fee);
+        let nullifier = poseidon2(nullifier_constant, burn_key);
 
         let burn_addr_balance = provider.get_balance(burn_addr).await?;
 

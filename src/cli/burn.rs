@@ -2,9 +2,11 @@ use super::CommonOpt;
 use crate::cli::utils::{
     append_coin_entry, check_required_files, coins_file, init_coins_file, next_coin_id,
 };
-use crate::constants::{poseidon_burn_address_prefix,poseidon_coin_prefix,poseidon_nullifier_prefix};
+use crate::constants::{
+    poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
+};
 use crate::fp::{Fp, FpRepr};
-use crate::poseidon::{poseidon2,poseidon3};
+use crate::poseidon::{poseidon2, poseidon3};
 use crate::utils::{RapidsnarkOutput, find_burn_key, generate_burn_address};
 use alloy::rlp::Encodable;
 use alloy::{
@@ -12,7 +14,7 @@ use alloy::{
     hex::ToHexExt,
     network::TransactionBuilder,
     primitives::{
-        B256, U256,
+        U256,
         utils::{format_ether, parse_ether},
     },
     providers::Provider,
@@ -60,24 +62,16 @@ impl BurnOpt {
         }
 
         println!("Generating a burn-key...");
-        let burn_key = find_burn_key(3,wallet_addr,fee);
+        let burn_key = find_burn_key(3, wallet_addr, fee);
 
-        let burn_addr = generate_burn_address(burn_addr_constant,burn_key, wallet_addr,fee);
-        let nullifier = poseidon2(nullifier_constant,burn_key);
+        let burn_addr = generate_burn_address(burn_addr_constant, burn_key, wallet_addr, fee);
+        let nullifier = poseidon2(nullifier_constant, burn_key);
 
         let remaining_coin_val =
             Fp::from_repr(FpRepr((amount - fee - spend).to_le_bytes::<32>())).unwrap();
-        println!("Remaining coin value: {}", amount - fee - spend);
-        println!("xxxxx{:?}", [coin_constant,burn_key, remaining_coin_val]);
-        let remaining_coin = poseidon3(coin_constant,burn_key, remaining_coin_val);
-        println!("final hash: {:?}",remaining_coin);
-        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
 
-        println!(
-            "Your burn-key: {}",
-            B256::from(U256::from_le_bytes(burn_key.to_repr().0)).encode_hex()
-        );
-        println!("Your burn-address is: {}", burn_addr);
+        let remaining_coin = poseidon3(coin_constant, burn_key, remaining_coin_val);
+        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
 
         let nonce = provider.get_transaction_count(wallet_addr).await?;
 
@@ -186,7 +180,6 @@ impl BurnOpt {
 
         let nullifier_u256 = U256::from_le_bytes(nullifier.to_repr().0);
 
-        println!("The remainig coin u256 is {}", remaining_coin_u256);
         println!("Broadcasting mint transaction...");
         let _result = self
             .common_opt

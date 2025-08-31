@@ -139,16 +139,10 @@ impl CommonOpt {
         wallet_addr: Address,
         input_path: impl AsRef<Path>,
     ) -> Result<()> {
-        println!("dfdfdfdfdfdfd");
-        println!(
-            "xxxxGenerating input.json file at: {}",
-            input_path.as_ref().display()
-        );
+    
         let proof = provider.get_proof(burn_addr, vec![]).await?;
         let json = input_file(proof, header_bytes, burn_key, fee, spend, wallet_addr)?.to_string();
-        println!("input.json: {}", json);
         let path = input_path.as_ref();
-        println!("Generating input.json file at: {}", path.display());
         std::fs::write(path, json)?;
         Ok(())
     }
