@@ -24,7 +24,7 @@ lazy_static! {
                 "sepolia".into(),
                 Network {
                     rpc: "https://sepolia.drpc.org".parse().unwrap(),
-                    beth: address!("0x6fa638704a839B28C5B7168C8916AdD9F75CDEEc"),
+                    beth: address!("0x1b218670EcaDA5B15e2cE1879074e5D903b55334"),
                     worm: address!("0x557E9e7Eed905C7d21183Ec333dB2a8B1e34A85F"),
                 },
             ),

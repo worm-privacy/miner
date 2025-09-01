@@ -2,22 +2,25 @@ mod burn;
 mod claim;
 mod generate_witness;
 mod info;
+mod ls;
 mod mine;
 mod participate;
 mod recover;
+mod spend;
 mod utils;
+use crate::fp::Fp;
 use crate::utils::{RapidsnarkOutput, input_file};
-use alloy::{signers::local::PrivateKeySigner};
-use anyhow::anyhow;
-use reqwest::Url;
-use structopt::StructOpt;
-
+use alloy::signers::local::PrivateKeySigner;
 use alloy::{
-    primitives::{
-        Address, U256,
-    },
+    primitives::{Address, U256},
     providers::{Provider, ProviderBuilder},
 };
+use anyhow::anyhow;
+use reqwest::Url;
+use serde_json::json;
+use structopt::StructOpt;
+
+use ff::PrimeField;
 
 use anyhow::Result;
 
@@ -30,7 +33,6 @@ pub struct CommonOpt {
     #[structopt(long)]
     custom_rpc: Option<Url>,
 }
-use crate::fp::{Fp,};
 use crate::utils::BETH;
 use std::path::Path;
 
@@ -140,8 +142,33 @@ impl CommonOpt {
         let proof = provider.get_proof(burn_addr, vec![]).await?;
         let json = input_file(proof, header_bytes, burn_key, fee, spend, wallet_addr)?.to_string();
         let path = input_path.as_ref();
-        println!("Generating input.json file at: {}", path.display());
         std::fs::write(path, json)?;
+        Ok(())
+    }
+    pub async fn write_spend_input_json<P: AsRef<Path>>(
+        &self,
+        burn_key: Fp,
+        balance: &str,
+        withdrawn_balance: &str,
+        receiver_address: &str,
+        fee: &str,
+        output_path: P,
+    ) -> std::io::Result<()> {
+        println!(
+            "Generating spend input JSON file at: {}",
+            output_path.as_ref().display()
+        );
+        let json_value = json!({
+            "burnKey": U256::from_le_bytes(burn_key.to_repr().0).to_string(),
+            "balance": balance,
+            "withdrawnBalance": withdrawn_balance,
+            "receiverAddress": receiver_address,
+            "fee": fee
+        });
+
+        let json_str = serde_json::to_string_pretty(&json_value)?;
+        std::fs::write(output_path, json_str)?;
+        println!("Spend input JSON file generated successfully.");
         Ok(())
     }
 }
@@ -151,6 +178,8 @@ pub use burn::BurnOpt;
 pub use claim::ClaimOpt;
 pub use generate_witness::GenerateWitnessOpt;
 pub use info::InfoOpt;
+pub use ls::LsOpt;
 pub use mine::MineOpt;
 pub use participate::ParticipateOpt;
 pub use recover::RecoverOpt;
+pub use spend::SpendOpt;

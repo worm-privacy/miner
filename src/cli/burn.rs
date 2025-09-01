@@ -1,7 +1,12 @@
 use super::CommonOpt;
-use crate::cli::utils::check_required_files;
+use crate::cli::utils::{
+    append_coin_entry, check_required_files, coins_file, init_coins_file, next_coin_id,
+};
+use crate::constants::{
+    poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
+};
 use crate::fp::{Fp, FpRepr};
-use crate::poseidon2::poseidon2;
+use crate::poseidon::{poseidon2, poseidon3};
 use crate::utils::{RapidsnarkOutput, find_burn_key, generate_burn_address};
 use alloy::rlp::Encodable;
 use alloy::{
@@ -9,7 +14,7 @@ use alloy::{
     hex::ToHexExt,
     network::TransactionBuilder,
     primitives::{
-        B256, U256,
+        U256,
         utils::{format_ether, parse_ether},
     },
     providers::Provider,
@@ -39,7 +44,9 @@ impl BurnOpt {
         let net = runtime_context.network;
         let provider = runtime_context.provider;
         let wallet_addr = runtime_context.wallet_address;
-
+        let burn_addr_constant = poseidon_burn_address_prefix();
+        let nullifier_constant = poseidon_nullifier_prefix();
+        let coin_constant = poseidon_coin_prefix();
         let fee = parse_ether(&self.fee)?;
         let spend = parse_ether(&self.spend)?;
         let amount = parse_ether(&self.amount)?;
@@ -55,20 +62,16 @@ impl BurnOpt {
         }
 
         println!("Generating a burn-key...");
-        let burn_key = find_burn_key(3);
+        let burn_key = find_burn_key(3, wallet_addr, fee);
 
-        let burn_addr = generate_burn_address(burn_key, wallet_addr);
-        let nullifier = poseidon2([burn_key, Fp::from(1)]);
+        let burn_addr = generate_burn_address(burn_addr_constant, burn_key, wallet_addr, fee);
+        let nullifier = poseidon2(nullifier_constant, burn_key);
 
         let remaining_coin_val =
             Fp::from_repr(FpRepr((amount - fee - spend).to_le_bytes::<32>())).unwrap();
-        let remaining_coin = poseidon2([burn_key, remaining_coin_val]);
 
-        println!(
-            "Your burn-key: {}",
-            B256::from(U256::from_le_bytes(burn_key.to_repr().0)).encode_hex()
-        );
-        println!("Your burn-address is: {}", burn_addr);
+        let remaining_coin = poseidon3(coin_constant, burn_key, remaining_coin_val);
+        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
 
         let nonce = provider.get_transaction_count(wallet_addr).await?;
 
@@ -151,6 +154,21 @@ impl BurnOpt {
             .arg(witness_path)
             .output()?;
 
+        let coins_json_path = "coins.json";
+        let coins_path = params_dir.join(coins_json_path);
+        println!("Generating coins.json file at: {}", coins_path.display());
+        init_coins_file(&coins_path)?;
+        let remaining_coin_str = U256::from_le_bytes(remaining_coin_val.to_repr().0);
+
+        let next_id = next_coin_id(&coins_path)?;
+        let new_coin = coins_file(
+            next_id,
+            burn_key,
+            remaining_coin_str,
+            &self.common_opt.network,
+        )?;
+        append_coin_entry(&coins_path, new_coin)?;
+        println!("New coin entry added",);
         output.status.success().then_some(()).ok_or_else(|| {
             anyhow!(
                 "Failed to generate proof: {}",
@@ -158,13 +176,12 @@ impl BurnOpt {
             )
         })?;
         let json_output: RapidsnarkOutput = serde_json::from_slice(&output.stdout)?;
-        println!("Generated proof successfully! {:?}", output);
+        println!("Generated proof successfully!");
 
         let nullifier_u256 = U256::from_le_bytes(nullifier.to_repr().0);
-        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
 
         println!("Broadcasting mint transaction...");
-        let _result = self
+        let result = self
             .common_opt
             .broadcast_mint(
                 &net,
@@ -178,7 +195,20 @@ impl BurnOpt {
                 wallet_addr,
             )
             .await;
-
+        match &result {
+            Ok(_) => {
+                println!(
+                    "broadcast_mint succeeded (block: {}, nullifier: {:?})",
+                    block.header.number, nullifier_u256,
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "broadcast_mint failed: {} (block: {}, nullifier: {:?})",
+                    e, block.header.number, nullifier_u256,
+                );
+            }
+        }
         Ok(())
     }
 }
