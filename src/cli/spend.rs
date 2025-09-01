@@ -1,4 +1,4 @@
-use crate::constants::{poseidon_coin_prefix, poseidon_nullifier_prefix};
+use crate::constants::poseidon_coin_prefix;
 use crate::fp::{Fp, FpRepr};
 use crate::poseidon::poseidon3;
 use crate::utils::RapidsnarkOutput;
