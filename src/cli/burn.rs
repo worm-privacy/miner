@@ -63,7 +63,7 @@ impl BurnOpt {
 
         println!("Generating a burn-key...");
         let burn_key = find_burn_key(3, wallet_addr, fee);
-
+        println!("Your burn_key: {:?}",burn_key);
         let burn_addr = generate_burn_address(burn_addr_constant, burn_key, wallet_addr, fee);
         let nullifier = poseidon2(nullifier_constant, burn_key);
 
