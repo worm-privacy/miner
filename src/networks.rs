@@ -17,7 +17,7 @@ lazy_static! {
                 Network {
                     rpc: "http://127.0.0.1:8545".parse().unwrap(),
                     beth: address!("0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"),
-                    worm: address!("0x5b1869D9A4C187F2EAa108f3062412ecf0526b24"),
+                    worm: address!("0xC89Ce4735882C9F0f0FE26686c53074E09B0D550"),
                 },
             ),
             (
@@ -25,7 +25,7 @@ lazy_static! {
                 Network {
                     rpc: "https://sepolia.drpc.org".parse().unwrap(),
                     beth: address!("0x1b218670EcaDA5B15e2cE1879074e5D903b55334"),
-                    worm: address!("0x557E9e7Eed905C7d21183Ec333dB2a8B1e34A85F"),
+                    worm: address!("0x78eFE1D19d5F5e9AED2C1219401b00f74166A1d9"),
                 },
             ),
         ]
