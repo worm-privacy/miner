@@ -51,8 +51,8 @@ impl BurnOpt {
         let spend = parse_ether(&self.spend)?;
         let amount = parse_ether(&self.amount)?;
 
-        if amount > parse_ether("10")? {
-            return Err(anyhow!("Can't burn more than 10 ETH in a single call!"));
+        if amount > parse_ether("1")? {
+            return Err(anyhow!("Can't burn more than 1 ETH in a single call!"));
         }
 
         if fee + spend > amount {
