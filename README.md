@@ -70,3 +70,39 @@ Test on Debian/Ubuntu systems:
          - `--assumed-worm-price` is your assumed WORM/ETH pair price.
          - `--future-epochs` is the number of epochs you would like to participate in in advance.
          - `--custom-rpc` is an optional parameter that takes in an rpc-url.
+
+## Docker Usage
+
+The worm-miner can be built and run using Docker, which automatically handles all dependencies and compilation of multiple components including rapidsnark (zero-knowledge proof system), witness circuits, and the Rust miner application. This eliminates the need to manually install build dependencies, Rust toolchain, or compile the various components.
+
+### Building the Docker Image
+
+The Docker build process compiles rapidsnark from source, builds witness generation circuits, and compiles the Rust application with configurable optimization flags:
+
+**Build with default (conservative) settings:**
+```bash
+docker build -t worm-miner .
+```
+
+**Build with CPU acceleration flags:**
+```bash
+docker build --build-arg RUSTFLAGS="-C target-cpu=native" -t worm-miner .
+```
+
+### Running with Docker
+
+**Show help (default behavior):**
+```bash
+docker run --rm worm-miner
+```
+
+**Pre-download parameters locally and mount as volume:**
+```bash
+make download_params
+docker run --rm -v ~/.worm-miner:/root/.worm-miner worm-miner burn --network sepolia --private-key [privkey] --amount 0.1
+```
+
+**Mining example:**
+```bash
+docker run --rm -v ~/.worm-miner:/root/.worm-miner worm-miner mine --network sepolia --private-key [privkey] --amount-per-epoch 0.001 --num-epochs 5 --claim-interval 10
+```
