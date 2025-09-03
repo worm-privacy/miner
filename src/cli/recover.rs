@@ -27,17 +27,7 @@ use alloy::{
 use anyhow::anyhow;
 use ff::{PrimeField};
 use alloy::hex;
-// #[derive(StructOpt)]
-// pub struct RecoverOpt {
-//     #[structopt(flatten)]
-//     common_opt: CommonOpt,
-//     #[structopt(long)]
-//     burn_key: String,
-//     #[structopt(long)]
-//     spend: String,
-//     #[structopt(long)]
-//     fee: String,
-// }   
+
 #[derive(StructOpt,)]
 pub enum RecoverOpt {
     /// Recover using a saved ID (load burn_key, fee, spend from file)
@@ -131,26 +121,20 @@ impl RecoverOpt {
                     Some(s) => parse_ether(&s)?, 
                     None => stored_spend.parse::<U256>()?,
                 };
-                println!("the spend value {:?}",spend);
 
                 (burn_key, spend, fee, common_opt)
             }
         };
         
         let burn_key = if raw_burn_key.starts_with("0x") {
-            println!("starting hex");
             let hex = raw_burn_key.strip_prefix("0x").unwrap();
             let bytes = hex::decode(hex)?;
             Fp::from_be_bytes(&bytes)
         } else {
-            println!("starting string");
             Fp::from_str_vartime(&raw_burn_key.to_string()).unwrap()
         };
 
 
-        // let burn_key = Fp::from_str_vartime(&self.burn_key.to_string()).unwrap();
-        println!("burn-key {:?}",burn_key);
-        println!("fee {:?}",fee);
         check_required_files(params_dir)?;
         let runtime_context = common_opt.setup().await?;
         let net = runtime_context.network;
@@ -159,17 +143,9 @@ impl RecoverOpt {
         let burn_addr_constant = poseidon_burn_address_prefix();
         let nullifier_constant = poseidon_nullifier_prefix();
         let coin_constant = poseidon_coin_prefix();
-        // let spend =  parse_ether(&spend)?;
         println!("Generating a burn-key...");
         
-        // let fee = parse_ether(&fee)?;
-        // let burn_key = Fp::from_repr(FpRepr(
-        //     U256::from_str_radix(&self.burn_key, 16)?.to_le_bytes(),
-        // ))
-        // .into_option()
-        // .ok_or(anyhow!("Cannot parse burn-key!"))?;
-        // let fee = U256::ZERO;
-        println!("feeeeee {:?}",fee);
+        
         let burn_addr = generate_burn_address(burn_addr_constant, burn_key, wallet_addr, fee);
         let nullifier = poseidon2(nullifier_constant, burn_key);
         let nullifier_u256 = U256::from_le_bytes(nullifier.to_repr().0);
@@ -183,7 +159,7 @@ impl RecoverOpt {
         let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
 
         println!(
-            "Your burn-key: {}",
+            "Your burn-key as string: {}",
            U256::from_le_bytes(burn_key.to_repr().0).to_string()
         );
         println!("Your burn-address is: {}", burn_addr);
@@ -212,7 +188,7 @@ impl RecoverOpt {
             )
             .await?;
 
-        let witness_path = "witness.wtns"; //proof_dir.path().join("witness.wtns");
+        let witness_path = "witness.wtns";
 
         let proc_path = std::env::current_exe().expect("Failed to get current exe path");
 
@@ -266,16 +242,13 @@ impl RecoverOpt {
             &common_opt.network,
         )?;
         append_new_entry(&coins_path, new_coin)?;
-        println!("new entry added!");
-        println!("sleeping for 4 sec..");
-        std::thread::sleep(std::time::Duration::from_secs(4));
         println!("Broadcasting mint transaction...");
         let result = common_opt
             .broadcast_mint(
                 &net,
                 provider,
-                &json_output,        // RapidsnarkOutput
-                block.header.number, // u64
+                &json_output,        
+                block.header.number,
                 nullifier_u256,
                 remaining_coin_u256,
                 fee,
