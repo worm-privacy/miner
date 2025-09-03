@@ -1,9 +1,7 @@
 use alloy::primitives::utils::parse_ether;
 use structopt::StructOpt;
-use tokio::time::Sleep;
 
 use std::process::Command;
-use std::time::Duration;
 use anyhow::{Context, bail};
 use serde_json::Value;
 
@@ -20,8 +18,7 @@ use crate::utils::{RapidsnarkOutput, generate_burn_address};
 use alloy::rlp::Encodable;
 use alloy::{
     eips::BlockId,
-    hex::ToHexExt,
-    primitives::{B256, U256},
+    primitives::{U256},
     providers::Provider,
 };
 use anyhow::anyhow;
