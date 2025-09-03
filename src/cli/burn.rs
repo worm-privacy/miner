@@ -14,7 +14,7 @@ use alloy::{
     hex::ToHexExt,
     network::TransactionBuilder,
     primitives::{
-        U256,B256,
+        U256,
         utils::{format_ether, parse_ether},
     },
     providers::Provider,
@@ -161,7 +161,7 @@ impl BurnOpt {
                 String::from_utf8_lossy(&output.stderr)
             )
         })?;
-
+- `--network` → The target network (anvil, sepolia, etc.).
         println!("Generating proof...");
         let raw_output = Command::new(&proc_path)
             .arg("rapidsnark")
