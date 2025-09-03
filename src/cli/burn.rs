@@ -1,6 +1,6 @@
 use super::CommonOpt;
 use crate::cli::utils::{
-    append_coin_entry, check_required_files, coins_file, init_coins_file, next_coin_id,
+    append_new_entry, check_required_files, coins_file,burn_file ,init_coins_file, next_id,
 };
 use crate::constants::{
     poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
@@ -60,10 +60,14 @@ impl BurnOpt {
                 "Sum of --fee and --spend should be less than --amount!"
             ));
         }
-
+        
         println!("Generating a burn-key...");
         let burn_key = find_burn_key(3, wallet_addr, fee);
         println!("Your burn_key: {:?}",burn_key);
+        println!(
+            "Your burn-key as string: {}",
+            U256::from_le_bytes(burn_key.to_repr().0).to_string()
+        );
         let burn_addr = generate_burn_address(burn_addr_constant, burn_key, wallet_addr, fee);
         let nullifier = poseidon2(nullifier_constant, burn_key);
 
@@ -74,6 +78,19 @@ impl BurnOpt {
         let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
 
         let nonce = provider.get_transaction_count(wallet_addr).await?;
+        let burn_json_path = "burn.json";
+        let burn_path = params_dir.join(burn_json_path);
+        init_coins_file(&burn_path)?;
+        // let burn_key_str = B256::from(U256::from_le_bytes(burn_key.to_repr().0)).encode_hex();
+        let next_burn_id = next_id(&burn_path)?;
+        let new_burn = burn_file(
+            next_burn_id,
+            burn_key,
+            fee,
+            &self.common_opt.network,
+            spend
+        )?;
+        append_new_entry(&burn_path, new_burn)?;
 
         // Build a transaction to send 100 wei from Alice to Bob.
         // The `from` field is automatically filled to the first signer's address (Alice).
@@ -144,9 +161,9 @@ impl BurnOpt {
                 String::from_utf8_lossy(&output.stderr)
             )
         })?;
-
+- `--network` → The target network (anvil, sepolia, etc.).
         println!("Generating proof...");
-        let output = Command::new(&proc_path)
+        let raw_output = Command::new(&proc_path)
             .arg("rapidsnark")
             .arg("--zkey")
             .arg(params_dir.join("proof_of_burn.zkey"))
@@ -154,20 +171,30 @@ impl BurnOpt {
             .arg(witness_path)
             .output()?;
 
+        println!(
+            "[rapidsnark] stderr:\n{}",
+            String::from_utf8_lossy(&raw_output.stderr)
+        );
+        raw_output.status.success().then_some(()).ok_or_else(|| {
+            anyhow!(
+                "Failed to generate proof: {}",
+                String::from_utf8_lossy(&raw_output.stderr)
+            )
+        })?;
         let coins_json_path = "coins.json";
         let coins_path = params_dir.join(coins_json_path);
         println!("Generating coins.json file at: {}", coins_path.display());
         init_coins_file(&coins_path)?;
         let remaining_coin_str = U256::from_le_bytes(remaining_coin_val.to_repr().0);
 
-        let next_id = next_coin_id(&coins_path)?;
+        let next_id = next_id(&coins_path)?;
         let new_coin = coins_file(
             next_id,
             burn_key,
             remaining_coin_str,
             &self.common_opt.network,
         )?;
-        append_coin_entry(&coins_path, new_coin)?;
+        append_new_entry(&coins_path, new_coin)?;
         println!("New coin entry added",);
         output.status.success().then_some(()).ok_or_else(|| {
             anyhow!(
@@ -175,11 +202,10 @@ impl BurnOpt {
                 String::from_utf8_lossy(&output.stderr)
             )
         })?;
-        let json_output: RapidsnarkOutput = serde_json::from_slice(&output.stdout)?;
+        let json_output: RapidsnarkOutput = serde_json::from_slice(&raw_output.stdout)?;
         println!("Generated proof successfully!");
 
         let nullifier_u256 = U256::from_le_bytes(nullifier.to_repr().0);
-
         println!("Broadcasting mint transaction...");
         let result = self
             .common_opt
