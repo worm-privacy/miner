@@ -39,7 +39,24 @@ pub fn coins_file(
     }))
 }
 
-pub fn next_coin_id<P: AsRef<Path>>(coins_path: P) -> Result<U256, anyhow::Error> {
+pub fn burn_file(
+    coin_id: U256,
+    burn_key: Fp,
+    fee: U256,
+    network: &str,
+    spend:U256,
+) -> Result<Value> {
+    
+    Ok(json!({
+        "id": coin_id.to_string(),
+        "burnKey": U256::from_le_bytes(burn_key.to_repr().0).to_string(),
+        "fee": fee.to_string(),
+        "spend":spend.to_string(),
+        "network": network,
+    }))
+}
+
+pub fn next_id<P: AsRef<Path>>(coins_path: P) -> Result<U256, anyhow::Error> {
     let path = coins_path.as_ref();
 
     // If the file doesn't exist, first ID is 1.
@@ -72,7 +89,7 @@ pub fn init_coins_file<P: AsRef<Path>>(coins_path: P) -> Result<(), anyhow::Erro
     Ok(())
 }
 
-pub fn append_coin_entry<P: AsRef<Path>>(coins_path: P, entry: Value) -> Result<(), anyhow::Error> {
+pub fn append_new_entry<P: AsRef<Path>>(coins_path: P, entry: Value) -> Result<(), anyhow::Error> {
     let path = coins_path.as_ref();
     let data =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;

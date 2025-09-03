@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use super::CommonOpt;
 use crate::cli::utils::{
-    append_coin_entry, check_required_files, coins_file, init_coins_file, next_coin_id,
+    append_new_entry, check_required_files, coins_file, init_coins_file, next_id,
 };
 use crate::utils::BETH;
 use alloy::{
@@ -257,14 +257,14 @@ impl SpendOpt {
         init_coins_file(&coins_path)?;
         let remaining_coin_str = U256::from_le_bytes(remaining_coin_val.to_repr().0);
         // 7. update coins.json
-        let next_id = next_coin_id(&coins_path)?;
+        let next_id = next_id(&coins_path)?;
         let new_coin = coins_file(
             next_id,
             burn_key_fp,
             remaining_coin_str,
             &self.common_opt.network,
         )?;
-        append_coin_entry(&coins_path, new_coin)?;
+        append_new_entry(&coins_path, new_coin)?;
         println!("New coin entry added",);
 
         Ok(())
