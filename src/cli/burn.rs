@@ -161,7 +161,6 @@ impl BurnOpt {
                 String::from_utf8_lossy(&output.stderr)
             )
         })?;
-- `--network` → The target network (anvil, sepolia, etc.).
         println!("Generating proof...");
         let raw_output = Command::new(&proc_path)
             .arg("rapidsnark")
