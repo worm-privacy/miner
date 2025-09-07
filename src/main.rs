@@ -9,7 +9,7 @@ pub mod cli;
 pub mod constants;
 pub mod networks;
 use crate::cli::{
-    BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, LsOpt, MineOpt, ParticipateOpt, SpendOpt,
+    BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, MineOpt, ParticipateOpt, SpendOpt,LsCommand,
 };
 mod utils;
 use crate::utils::{RapidsnarkOutput, RapidsnarkProof};
@@ -19,7 +19,7 @@ use alloy::rlp::RlpDecodable;
 #[derive(StructOpt)]
 enum MinerOpt {
     Info(InfoOpt),
-    Ls(LsOpt),
+    Ls(LsCommand),
     Spend(SpendOpt),
     Participate(ParticipateOpt),
     Claim(ClaimOpt),
