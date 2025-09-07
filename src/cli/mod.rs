@@ -183,3 +183,4 @@ pub use mine::MineOpt;
 pub use participate::ParticipateOpt;
 pub use recover::RecoverOpt;
 pub use spend::SpendOpt;
+pub use ls::LsCommand;
