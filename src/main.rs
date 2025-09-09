@@ -2,10 +2,13 @@ mod fp;
 mod poseidon;
 
 use cli::RecoverOpt;
-
+pub mod polling;
 use std::path::PathBuf;
 use structopt::StructOpt;
 pub mod cli;
+pub mod server;
+use crate::server::run_server;
+use crate::server::run_server2;
 pub mod constants;
 pub mod networks;
 use crate::cli::{
@@ -75,17 +78,43 @@ struct RlpLeaf {
     key: alloy::rlp::Bytes,
     value: alloy::rlp::Bytes,
 }
+#[derive(StructOpt)]
+pub enum Command {
+    /// Run miner in CLI mode
+    Cli(MinerOpt),
 
+    /// Start the REST server
+    Server,
+    Server2,
+}
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    dotenvy::dotenv().ok();
     let params_dir = homedir::my_home()?
         .ok_or(anyhow::anyhow!("Can't find user's home directory!"))?
         .join(".worm-miner");
 
-    match MinerOpt::from_args().run(&params_dir).await {
-        Ok(()) => {}
-        Err(e) => eprintln!("Error running command: {:?}", e),
+    let redis_url = std::env::var("REDIS_URL")
+        .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+    println!("redis_url:{}",redis_url);
+    // match MinerOpt::from_args().run(&params_dir).await {
+    //     Ok(()) => {}
+    //     Err(e) => eprintln!("Error running command: {:?}", e),
+    // }
+    match Command::from_args() {
+        Command::Cli(miner_opt) => {
+            if let Err(e) = miner_opt.run(&params_dir).await {
+                eprintln!("Error running command: {:?}", e);
+            }
+        }
+          Command::Server => {
+            run_server().await?;
+        }
+         Command::Server2 => {
+            run_server2().await?;
+        }
     }
 
     Ok(())
+    
 }
