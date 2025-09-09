@@ -1,6 +1,6 @@
 use super::CommonOpt;
 use crate::cli::utils::{
-    append_new_entry, check_required_files, coins_file,burn_file ,init_coins_file, next_id,
+    append_new_entry, burn_file, check_required_files, coins_file, init_coins_file, next_id,
 };
 use crate::constants::{
     poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
@@ -60,10 +60,10 @@ impl BurnOpt {
                 "Sum of --fee and --spend should be less than --amount!"
             ));
         }
-        
+
         println!("Generating a burn-key...");
         let burn_key = find_burn_key(3, wallet_addr, fee);
-        println!("Your burn_key: {:?}",burn_key);
+        println!("Your burn_key: {:?}", burn_key);
         println!(
             "Your burn-key as string: {}",
             U256::from_le_bytes(burn_key.to_repr().0).to_string()
@@ -83,13 +83,7 @@ impl BurnOpt {
         init_coins_file(&burn_path)?;
         // let burn_key_str = B256::from(U256::from_le_bytes(burn_key.to_repr().0)).encode_hex();
         let next_burn_id = next_id(&burn_path)?;
-        let new_burn = burn_file(
-            next_burn_id,
-            burn_key,
-            fee,
-            &self.common_opt.network,
-            spend
-        )?;
+        let new_burn = burn_file(next_burn_id, burn_key, fee, &self.common_opt.network, spend)?;
         append_new_entry(&burn_path, new_burn)?;
 
         // Build a transaction to send 100 wei from Alice to Bob.

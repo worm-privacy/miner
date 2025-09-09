@@ -114,6 +114,10 @@ impl CommonOpt {
                 spend,
                 // user’s address
                 wallet_addr,
+                // prover fee
+                U256::ZERO,
+                // prover address
+                wallet_addr,
             )
             .send()
             .await?
@@ -178,9 +182,9 @@ pub use burn::BurnOpt;
 pub use claim::ClaimOpt;
 pub use generate_witness::GenerateWitnessOpt;
 pub use info::InfoOpt;
+pub use ls::LsCommand;
 pub use ls::LsOpt;
 pub use mine::MineOpt;
 pub use participate::ParticipateOpt;
 pub use recover::RecoverOpt;
 pub use spend::SpendOpt;
-pub use ls::LsCommand;

@@ -7,6 +7,19 @@
         },
         {
             "type": "function",
+            "name": "MINT_CAP",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
             "name": "allowance",
             "inputs": [
                 {
@@ -131,6 +144,16 @@
                 },
                 {
                     "name": "_receiver",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "_proverFee",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "_prover",
                     "type": "address",
                     "internalType": "address"
                 }

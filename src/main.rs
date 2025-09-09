@@ -9,7 +9,7 @@ pub mod cli;
 pub mod constants;
 pub mod networks;
 use crate::cli::{
-    BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, MineOpt, ParticipateOpt, SpendOpt,LsCommand,
+    BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, LsCommand, MineOpt, ParticipateOpt, SpendOpt,
 };
 mod utils;
 use crate::utils::{RapidsnarkOutput, RapidsnarkProof};

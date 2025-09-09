@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde_json::Value;
-use std::path::{Path};
+use std::path::Path;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -52,7 +52,8 @@ impl LsOpt {
         let matches = entries
             .into_iter()
             .filter(|entry| {
-                entry.get("network")
+                entry
+                    .get("network")
                     .and_then(Value::as_str)
                     .map_or(false, |net| net == self.network)
             })
