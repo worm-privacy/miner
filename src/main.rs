@@ -6,8 +6,11 @@ use cli::RecoverOpt;
 use std::path::PathBuf;
 use structopt::StructOpt;
 pub mod cli;
+pub mod logic;
+use crate::server3::run_server32;
 pub mod constants;
 pub mod networks;
+pub mod server3;
 use crate::cli::{
     BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, MineOpt, ParticipateOpt, SpendOpt,LsCommand,
 };
@@ -33,6 +36,7 @@ enum MinerOpt {
     Burn(BurnOpt),
     Mine(MineOpt),
     Recover(RecoverOpt),
+    Server,
 }
 
 impl MinerOpt {
@@ -47,8 +51,13 @@ impl MinerOpt {
             MinerOpt::Participate(cmd) => cmd.run().await,
             MinerOpt::Mine(cmd) => cmd.run().await,
             MinerOpt::Rapidsnark { zkey, witness } => {
+                // println!("ZKEY PATH: {}", zkey.display());
+                // println!("WITNESS PATH: {}", witness.display());
+                // println!("first");
                 let params = std::fs::read(zkey)?;
+                // println!("second");
                 let witness = std::fs::read(witness)?;
+                // println!("yoooo");
                 let proof = worm_witness_gens::rapidsnark(&params, &witness)?;
                 let proof_proof: crate::RapidsnarkProof = serde_json::from_str(&proof.proof)?;
                 let proof_public: Vec<alloy::primitives::U256> =
@@ -66,6 +75,10 @@ impl MinerOpt {
             }
 
             MinerOpt::Recover(cmd) => cmd.run(params_dir).await,
+            MinerOpt::Server => {
+                println!("🚀 Starting server...");
+                run_server32().await
+            }
         }
     }
 }
