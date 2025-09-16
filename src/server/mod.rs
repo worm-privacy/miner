@@ -27,18 +27,9 @@ fn load_env_files() {
     if let Ok(p) = std::env::var("ENV_FILE") {
         let _ = dotenvy::from_filename_override(p);
     }
-    print_selected_env()
 }
 
-fn print_selected_env() {
-    println!("[env] Effective config:");
-    for key in ["HOST", "PORT", "PROOF_QUEUE_CAP", "RUST_LOG"] {
-        match std::env::var(key) {
-            Ok(v) => println!("[env] {key} = {v}"),
-            Err(_) => println!("[env] {key} = <unset>"),
-        }
-    }
-}
+
 
 fn socket_addr_from_env() -> SocketAddr {
     if let Ok(s) = std::env::var("SOCKET_ADDR")
