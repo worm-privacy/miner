@@ -1,4 +1,5 @@
 # Build rapidsnark from source
+# syntax=docker/dockerfile:1.6
 FROM debian:bookworm-slim AS rapidsnark-builder
 WORKDIR /src
 
@@ -85,7 +86,11 @@ COPY --from=circuits-builder /src/witness/spend /tmp/witness/spend
 COPY --from=circuits-builder /src/witness/fr /tmp/witness/fr
 COPY --from=circuits-builder /src/witness/Makefile /tmp/witness/
 
-# Build args for Rust flags configuration
+# Build args for labels/metadata
+ARG VERSION=dev
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+
 # By default, use conservative flags for wider compatibility
 ARG RUSTFLAGS="-C target-cpu=x86-64 -C target-feature=-avx,-avx2,-fma"
 ENV RUSTFLAGS="${RUSTFLAGS}"
@@ -97,6 +102,18 @@ RUN cargo +nightly build --release
 # Final runtime image
 FROM debian:bookworm-slim
 WORKDIR /app
+
+# OCI labels for GHCR
+ARG VERSION=dev
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="worm-miner" \
+      org.opencontainers.image.description="worm-miner CLI with embedded server subcommand" \
+      org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY:-your/repo}" \
+      org.opencontainers.image.revision="$VCS_REF" \
+      org.opencontainers.image.version="$VERSION" \
+      org.opencontainers.image.created="$BUILD_DATE" \
+      org.opencontainers.image.licenses="Apache-2.0"
 
 # Install runtime dependencies including wget and make for artifact download
 RUN apt-get update && \
@@ -121,20 +138,26 @@ COPY Makefile /usr/local/share/worm-miner/Makefile
 # Create directories
 RUN mkdir -p /root/.worm-miner /usr/local/share/worm-miner
 
-
 # Create artifact download helper script
-RUN cat > /usr/local/bin/worm-miner-download-artifacts << 'EOF'
-#!/bin/bash
+RUN <<'EOF'
+cat > /usr/local/bin/worm-miner-download-artifacts <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
 echo "🔄 Downloading worm-miner artifacts..."
 cd /usr/local/share/worm-miner
 make download_params
 echo "✅ Artifacts downloaded to /root/.worm-miner/"
 echo "📁 Contents:"
 ls -lah /root/.worm-miner/
+SCRIPT
+chmod +x /usr/local/bin/worm-miner-download-artifacts
 EOF
 
 # Make download artifacts script executable
 RUN chmod +x /usr/local/bin/worm-miner-download-artifacts
+
+# Document the server port (your code reads from env, defaults to 8080)
+EXPOSE 8080
 
 # Set the entrypoint
 ENTRYPOINT ["/usr/local/bin/worm-miner"]

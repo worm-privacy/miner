@@ -1,0 +1,12 @@
+target
+.git
+.github
+**/*.rs.bk
+**/*.swp
+**/*.swo
+node_modules
+.wasm-pack
+Cargo.lock
+*.env
+settings.env
+.worm-miner/
