@@ -2,8 +2,11 @@ name: docker-publish
 
 on:
   push:
-    branches: [ "main","feat/server_impl" ]
-    tags: [ "v*.*.*" ]
+    branches:
+      - main
+      - feat/server_impl
+    tags:
+      - "v*.*.*"
   workflow_dispatch: {}
 
 permissions:
