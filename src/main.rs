@@ -11,7 +11,7 @@ use crate::server::run_server;
 pub mod constants;
 pub mod networks;
 use crate::cli::{
-    BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, MineOpt, ParticipateOpt, SpendOpt,LsCommand,
+    BurnOpt, ClaimOpt, GenerateWitnessOpt, InfoOpt, LsCommand, MineOpt, ParticipateOpt, SpendOpt,
 };
 mod utils;
 use crate::utils::{RapidsnarkOutput, RapidsnarkProof};
@@ -30,6 +30,8 @@ enum MinerOpt {
         zkey: PathBuf,
         #[structopt(long)]
         witness: PathBuf,
+        #[structopt(long, value_name = "FILE", default_value = "rapidsnark_output.json")]
+        out: PathBuf,
     },
     GenerateWitness(GenerateWitnessOpt),
     Burn(BurnOpt),
@@ -49,21 +51,20 @@ impl MinerOpt {
             MinerOpt::Claim(cmd) => cmd.run().await,
             MinerOpt::Participate(cmd) => cmd.run().await,
             MinerOpt::Mine(cmd) => cmd.run().await,
-            MinerOpt::Rapidsnark { zkey, witness } => {
+            MinerOpt::Rapidsnark { zkey, witness, out } => {
                 let params = std::fs::read(zkey)?;
                 let witness = std::fs::read(witness)?;
                 let proof = worm_witness_gens::rapidsnark(&params, &witness)?;
                 let proof_proof: crate::RapidsnarkProof = serde_json::from_str(&proof.proof)?;
                 let proof_public: Vec<alloy::primitives::U256> =
                     serde_json::from_str(&proof.public)?;
-
-                println!(
-                    "{}",
-                    serde_json::to_string(&crate::RapidsnarkOutput {
-                        proof: proof_proof,
-                        public: proof_public
-                    })?
-                );
+                let output = crate::RapidsnarkOutput {
+                    proof: proof_proof,
+                    public: proof_public,
+                };
+                let json = serde_json::to_string_pretty(&output)?;
+                std::fs::write(&out, json.as_bytes())?;
+                println!("💾 Saved RapidsnarkOutput to: {}", out.display());
 
                 Ok(())
             }

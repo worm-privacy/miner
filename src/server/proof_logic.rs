@@ -2,6 +2,9 @@ use crate::constants::{
     poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
 };
 use crate::fp::{Fp, FpRepr};
+use crate::poseidon::{poseidon2, poseidon3};
+use crate::server::types::{ProofInput, ProofOutput};
+use crate::utils::{RapidsnarkOutput, input_file};
 use alloy::{
     eips::BlockId,
     primitives::{Address, U256, utils::parse_ether},
@@ -9,15 +12,12 @@ use alloy::{
     rlp::Encodable,
 };
 use anyhow::Result;
-use std::fs;
 use anyhow::anyhow;
 use ff::PrimeField;
+use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
-use crate::utils::{RapidsnarkOutput, input_file};
 use std::str::FromStr;
-use crate::poseidon::{poseidon2, poseidon3};
-use crate::server::types::{ProofInput,ProofOutput};
-
 
 pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
     println!("[compute_proof] Starting proof generation job");
@@ -51,8 +51,7 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
 
     // 6. Burn key
     println!("[compute_proof] Parsing burn key...");
-    let burn_key_fp = Fp::from_str_vartime(&input.burn_key)
-        .ok_or(anyhow!("Invalid burn_key"))?;
+    let burn_key_fp = Fp::from_str_vartime(&input.burn_key).ok_or(anyhow!("Invalid burn_key"))?;
 
     // 7. Generate burn address
     println!("[compute_proof] Generating burn address...");
@@ -85,7 +84,6 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
         .get_block(BlockId::latest())
         .await?
         .ok_or(anyhow!("Block not found!"))?;
-   
 
     let mut header_bytes = Vec::new();
     block.header.inner.encode(&mut header_bytes);
@@ -93,7 +91,7 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
 
     // 12. Get proof
     println!("[compute_proof] Fetching account proof...");
-    let proof  = provider.get_proof(burn_addr, vec![]).await?;
+    let proof = provider.get_proof(burn_addr, vec![]).await?;
 
     // 13. Build input.json
     println!("[compute_proof] Creating input.json...");
@@ -128,13 +126,22 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
     }
 
     // 16. Generate zk proof
-    println!("[compute_proof] Running rapidsnark...");
+    let out_path: PathBuf = std::env::current_dir()?.join("rapidsnark_output.json");
+    if out_path.exists() {
+        let _ = std::fs::remove_file(&out_path);
+    }
+    println!(
+        "[compute_proof] Running rapidsnark -> {}",
+        out_path.display()
+    );
     let raw_output = Command::new(&proc_path)
         .arg("rapidsnark")
         .arg("--zkey")
         .arg(params_dir.join("proof_of_burn.zkey"))
         .arg("--witness")
         .arg("witness.wtns")
+        .arg("--out")
+        .arg(&out_path)
         .output()?;
 
     if !raw_output.status.success() {
@@ -144,11 +151,15 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
         );
         return Err(anyhow!("Failed to generate proof"));
     }
-
+    println!(
+        "[Rapidsnark] output: {}",
+        String::from_utf8_lossy(&raw_output.stdout)
+    );
     // 17. Parse final output
-    println!("[compute_proof] Parsing output...");
-    let json_output: RapidsnarkOutput = serde_json::from_slice(&raw_output.stdout)?;
-    let json_value = serde_json::to_value(json_output)?;
+    let json_bytes = std::fs::read(&out_path)?;
+
+    let json_output: RapidsnarkOutput = serde_json::from_slice(&json_bytes)?;
+    let json_value = serde_json::to_value(&json_output)?;
 
     println!("[compute_proof] ✅ Proof generated successfully!");
 

@@ -1,6 +1,6 @@
 use super::CommonOpt;
 use crate::cli::utils::{
-    append_new_entry, check_required_files, coins_file,burn_file ,init_coins_file, next_id,
+    append_new_entry, burn_file, check_required_files, coins_file, init_coins_file, next_id,
 };
 use crate::constants::{
     poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
@@ -24,7 +24,7 @@ use anyhow::anyhow;
 use ff::PrimeField;
 use std::process::Command;
 use structopt::StructOpt;
-
+use std::path::PathBuf;
 #[derive(StructOpt)]
 pub struct BurnOpt {
     #[structopt(flatten)]
@@ -60,10 +60,10 @@ impl BurnOpt {
                 "Sum of --fee and --spend should be less than --amount!"
             ));
         }
-        
+
         println!("Generating a burn-key...");
         let burn_key = find_burn_key(3, wallet_addr, fee);
-        println!("Your burn_key: {:?}",burn_key);
+        println!("Your burn_key: {:?}", burn_key);
         println!(
             "Your burn-key as string: {}",
             U256::from_le_bytes(burn_key.to_repr().0).to_string()
@@ -81,15 +81,8 @@ impl BurnOpt {
         let burn_json_path = "burn.json";
         let burn_path = params_dir.join(burn_json_path);
         init_coins_file(&burn_path)?;
-        // let burn_key_str = B256::from(U256::from_le_bytes(burn_key.to_repr().0)).encode_hex();
         let next_burn_id = next_id(&burn_path)?;
-        let new_burn = burn_file(
-            next_burn_id,
-            burn_key,
-            fee,
-            &self.common_opt.network,
-            spend
-        )?;
+        let new_burn = burn_file(next_burn_id, burn_key, fee, &self.common_opt.network, spend)?;
         append_new_entry(&burn_path, new_burn)?;
 
         // Build a transaction to send 100 wei from Alice to Bob.
@@ -162,12 +155,22 @@ impl BurnOpt {
             )
         })?;
         println!("Generating proof...");
+        let out_path: PathBuf = std::env::current_dir()?.join("rapidsnark_output.json");
+        if out_path.exists() {
+            let _ = std::fs::remove_file(&out_path);
+        }
+        println!(
+            "[compute_proof] Running rapidsnark -> {}",
+            out_path.display()
+        );
         let raw_output = Command::new(&proc_path)
             .arg("rapidsnark")
             .arg("--zkey")
             .arg(params_dir.join("proof_of_burn.zkey"))
             .arg("--witness")
             .arg(witness_path)
+            .arg("--out")
+            .arg(&out_path)
             .output()?;
 
         println!(
@@ -180,6 +183,10 @@ impl BurnOpt {
                 String::from_utf8_lossy(&raw_output.stderr)
             )
         })?;
+        println!(
+            "[Rapidsnark] output: {}",
+            String::from_utf8_lossy(&raw_output.stdout)
+        );
         let coins_json_path = "coins.json";
         let coins_path = params_dir.join(coins_json_path);
         println!("Generating coins.json file at: {}", coins_path.display());
@@ -201,7 +208,22 @@ impl BurnOpt {
                 String::from_utf8_lossy(&output.stderr)
             )
         })?;
-        let json_output: RapidsnarkOutput = serde_json::from_slice(&raw_output.stdout)?;
+        if !raw_output.status.success() {
+            println!(
+                "[compute_proof] rapidsnark error: {}",
+                String::from_utf8_lossy(&raw_output.stderr)
+            );
+            return Err(anyhow!("Failed to generate proof"));
+        }
+        println!(
+            "[Rapidsnark] output: {:?}",
+            String::from_utf8_lossy(&raw_output.stdout)
+        );
+        // 17. Parse final output
+        let json_bytes = std::fs::read(&out_path)?;
+
+        let json_output: RapidsnarkOutput = serde_json::from_slice(&json_bytes)?;
+        // let json_value = serde_json::to_value(&json_output)?;
         println!("Generated proof successfully!");
 
         let nullifier_u256 = U256::from_le_bytes(nullifier.to_repr().0);

@@ -6,7 +6,7 @@ use alloy::primitives::Address;
 use alloy::rlp::Encodable;
 use anyhow::{Context, bail};
 use std::str::FromStr;
-
+use std::path::PathBuf;
 use super::CommonOpt;
 use crate::cli::utils::{
     append_new_entry, check_required_files, coins_file, init_coins_file, next_id,
@@ -190,13 +190,22 @@ impl SpendOpt {
           7. generate proof
         */
         println!("Generating proof...");
-
+        let out_path: PathBuf = std::env::current_dir()?.join("rapidsnark_output.json");
+        if out_path.exists() {
+            let _ = std::fs::remove_file(&out_path);
+        }
+        println!(
+            "[compute_proof] Running rapidsnark -> {}",
+            out_path.display()
+        );
         let raw_output = Command::new(&proc_path)
             .arg("rapidsnark")
             .arg("--zkey")
             .arg(&zkey_path)
             .arg("--witness")
             .arg(&witness_path)
+            .arg("--out")
+            .arg(&out_path)
             .output()
             .with_context(|| format!("Failed to run rapidsnark at {:?}", proc_path))?;
 
@@ -207,16 +216,14 @@ impl SpendOpt {
         if raw_output.stdout.is_empty() {
             bail!("rapidsnark stdout was empty — cannot parse JSON");
         }
-        let stdout_str = String::from_utf8_lossy(&raw_output.stdout);
+        println!(
+            "[Rapidsnark] output: {}",
+            String::from_utf8_lossy(&raw_output.stdout)
+        );
 
-        let output: RapidsnarkOutput =
-            serde_json::from_slice(&raw_output.stdout).with_context(|| {
-                format!(
-                    "Failed to deserialize rapidsnark output as RapidsnarkOutput:\n{}",
-                    stdout_str
-                )
-            })?;
+        let json_bytes = std::fs::read(&out_path)?;
 
+        let output: RapidsnarkOutput = serde_json::from_slice(&json_bytes)?;
         println!("Generated proof successfully!");
         /*
           8. send spend transaction
