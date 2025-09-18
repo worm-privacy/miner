@@ -155,7 +155,7 @@ RUN set -e; \
     'set -euo pipefail' \
     'echo "🔄 Downloading worm-miner artifacts..."' \
     'cd /usr/local/share/worm-miner' \
-    'make download_params' \
+    'make WGET_ARGS=-q download_params' \
     'echo "✅ Artifacts downloaded to /root/.worm-miner/"' \
     'echo "📁 Contents:"' \
     'ls -lah /root/.worm-miner/' \
