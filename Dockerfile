@@ -191,6 +191,8 @@ RUN set -e; \
 # Document the default server port
 EXPOSE 8080
 
+RUN /usr/local/bin/worm-miner-download-artifacts
+
 # Entrypoint wrapper (auto-download then exec worm-miner)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["--help"]
