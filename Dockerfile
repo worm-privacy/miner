@@ -155,7 +155,6 @@ RUN set -e; \
     'set -euo pipefail' \
     'echo "🔄 Downloading worm-miner artifacts..."' \
     'cd /usr/local/share/worm-miner' \
-    'make WGET_ARGS=-q download_params' \
     'echo "✅ Artifacts downloaded to /root/.worm-miner/"' \
     'echo "📁 Contents:"' \
     'ls -lah /root/.worm-miner/' \
@@ -190,8 +189,6 @@ RUN set -e; \
 
 # Document the default server port
 EXPOSE 8080
-
-RUN /usr/local/bin/worm-miner-download-artifacts
 
 # Entrypoint wrapper (auto-download then exec worm-miner)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
