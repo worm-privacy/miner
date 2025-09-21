@@ -83,7 +83,7 @@ RUN mkdir -p /tmp/witness/rapidsnark-linux-x86_64-v0.0.7/lib && \
 COPY --from=circuits-builder /src/witness/proof_of_burn /tmp/witness/proof_of_burn
 COPY --from=circuits-builder /src/witness/spend /tmp/witness/spend
 COPY --from=circuits-builder /src/witness/fr /tmp/witness/fr
-COPY --from=circuits-builder /src/witness/Makefile /tmp/witness/Makefile
+COPY --from=circuits-builder /src/witness/Makefile /tmp/witness/
 
 # Build args for Rust flags configuration
 # By default, use conservative flags for wider compatibility
