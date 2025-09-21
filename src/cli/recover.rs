@@ -1,31 +1,21 @@
-use alloy::primitives::utils::parse_ether;
 use structopt::StructOpt;
 
 use anyhow::{Context, bail};
 use serde_json::Value;
-use std::process::Command;
 
 use super::CommonOpt;
 use crate::cli::utils::{
-    append_new_entry, check_required_files, coins_file, init_coins_file, next_id,
+    check_required_files,
 };
-use crate::constants::{
-    poseidon_burn_address_prefix, poseidon_coin_prefix, poseidon_nullifier_prefix,
-};
-use crate::fp::{Fp, FpRepr};
-use crate::poseidon::{poseidon2, poseidon3};
-use crate::utils::{RapidsnarkOutput, generate_burn_address};
+
+use crate::fp::{Fp};
 use std::fs;
-use std::path::PathBuf;
-use alloy::hex;
-use alloy::rlp::Encodable;
-use alloy::{eips::BlockId, primitives::U256, providers::Provider};
+use alloy::{primitives::{U256,utils::parse_ether},hex};
 use anyhow::anyhow;
 use ff::PrimeField;
 
 #[derive(StructOpt)]
 pub enum RecoverOpt {
-    /// Recover using a saved ID (load burn_key, fee, spend from file)
     ById {
         #[structopt(flatten)]
         common_opt: CommonOpt,
@@ -35,7 +25,6 @@ pub enum RecoverOpt {
         spend: Option<String>,
     },
 
-    /// Recover by providing burn_key, spend, and fee manually
     Manual {
         #[structopt(flatten)]
         common_opt: CommonOpt,
@@ -58,7 +47,6 @@ impl RecoverOpt {
             } => {
                 let fee = parse_ether(&fee)?;
                 let spend = parse_ether(&spend)?;
-
                 (burn_key, spend, fee, common_opt)
             }
 
@@ -129,29 +117,11 @@ impl RecoverOpt {
         };
 
         check_required_files(params_dir)?;
-        let runtime_context = common_opt.setup().await?;
-        let net = runtime_context.network;
-        let provider = runtime_context.provider;
-        let wallet_addr = runtime_context.wallet_address;
-        let burn_addr_constant = poseidon_burn_address_prefix();
-        let nullifier_constant = poseidon_nullifier_prefix();
-        let coin_constant = poseidon_coin_prefix();
-        println!("Generating a burn-key...");
 
-        let burn_addr = generate_burn_address(burn_addr_constant, burn_key, wallet_addr, fee);
-        let nullifier = poseidon2(nullifier_constant, burn_key);
-        let nullifier_u256 = U256::from_le_bytes(nullifier.to_repr().0);
+        
 
-        let burn_addr_balance = provider.get_balance(burn_addr).await?;
-        if burn_addr_balance.is_zero() {
-            panic!("No ETH is present in the burn address!");
-        }
-        let remaining_coin_val = Fp::from_repr(FpRepr(
-            (burn_addr_balance - fee - spend).to_le_bytes::<32>(),
-        ))
-        .unwrap();
-        let remaining_coin = poseidon3(coin_constant, burn_key, remaining_coin_val);
-        let remaining_coin_u256 = U256::from_le_bytes(remaining_coin.to_repr().0);
+        let (burn_addr, nullifier_fp) =
+            common_opt.recover_prepare_from_key(burn_key, fee).await?;
 
         println!(
             "Your burn-key as string: {}",
@@ -159,130 +129,36 @@ impl RecoverOpt {
         );
         println!("Your burn-address is: {}", burn_addr);
 
-        let block = provider
-            .get_block(BlockId::latest())
-            .await?
-            .ok_or(anyhow!("Block not found!"))?;
+        let (remaining_coin_val, remaining_coin_u256) = common_opt
+            .recover_check_balance_and_compute_remaining(burn_addr, burn_key, fee, spend)
+            .await?;
 
-        println!("Generated proof for block #{}", block.header.number);
-
-        let input_json_path = "input.json";
-        let mut header_bytes = Vec::new();
-        block.header.inner.encode(&mut header_bytes);
-        println!("Generating input.json file at: {}", input_json_path);
-        common_opt
-            .generate_input_file(
-                &provider,
-                header_bytes,
+        let (json_output, block_number, _out_path) = common_opt
+            .build_and_prove_burn(
+                params_dir,
                 burn_addr,
                 burn_key,
                 fee,
                 spend,
-                wallet_addr,
-                input_json_path,
+                "input.json",
+                "witness.wtns",
             )
             .await?;
 
-        let witness_path = "witness.wtns";
+        common_opt.persist_burn_data(params_dir, burn_key, remaining_coin_val,None,None,true)?;
 
-        let proc_path = std::env::current_exe().expect("Failed to get current exe path");
-
-        println!("Generating witness.wtns file at: {}", witness_path);
-        let witness_output = Command::new(&proc_path)
-            .arg("generate-witness")
-            .arg("proof-of-burn")
-            .arg("--input")
-            .arg(input_json_path)
-            .arg("--dat")
-            .arg(params_dir.join("proof_of_burn.dat"))
-            .arg("--witness")
-            .arg(witness_path)
-            .output()?;
-
-        witness_output
-            .status
-            .success()
-            .then_some(())
-            .ok_or_else(|| {
-                anyhow!(
-                    "Failed to generate witness file: {}",
-                    String::from_utf8_lossy(&witness_output.stderr)
-                )
-            })?;
-        println!("Generating proof...");
-        let out_path: PathBuf = std::env::current_dir()?.join("rapidsnark_output.json");
-        if out_path.exists() {
-            let _ = std::fs::remove_file(&out_path);
-        }
-        println!(
-            "[compute_proof] Running rapidsnark -> {}",
-            out_path.display()
-        );
-        let raw_output = Command::new(&proc_path)
-            .arg("rapidsnark")
-            .arg("--zkey")
-            .arg(params_dir.join("proof_of_burn.zkey"))
-            .arg("--witness")
-            .arg(witness_path)
-            .arg("--out")
-            .arg(&out_path)
-            .output()?;
-
-        println!(
-            "[rapidsnark] stderr:\n{}",
-            String::from_utf8_lossy(&raw_output.stderr)
-        );
-        raw_output.status.success().then_some(()).ok_or_else(|| {
-            anyhow!(
-                "Failed to generate proof: {}",
-                String::from_utf8_lossy(&raw_output.stderr)
-            )
-        })?;
-        println!(
-            "[Rapidsnark] output: {}",
-            String::from_utf8_lossy(&raw_output.stdout)
-        );
-
-        let json_bytes = std::fs::read(&out_path)?;
-
-        let json_output: RapidsnarkOutput = serde_json::from_slice(&json_bytes)?;
-        let coins_json_path = "coins.json";
-        let coins_path = params_dir.join(coins_json_path);
-        println!("Generating coins.json file at: {}", coins_path.display());
-        init_coins_file(&coins_path)?;
-        let remaining_coin_str = U256::from_le_bytes(remaining_coin_val.to_repr().0);
-
-        let next_id = next_id(&coins_path)?;
-        let new_coin = coins_file(next_id, burn_key, remaining_coin_str, &common_opt.network)?;
-        append_new_entry(&coins_path, new_coin)?;
-        println!("Broadcasting mint transaction...");
-        let result = common_opt
+        let nullifier_u256 = U256::from_le_bytes(nullifier_fp.to_repr().0);
+        common_opt
             .broadcast_mint(
-                &net,
-                provider,
                 &json_output,
-                block.header.number,
+                block_number,
                 nullifier_u256,
                 remaining_coin_u256,
                 fee,
                 spend,
-                wallet_addr,
             )
-            .await;
-        match &result {
-            Ok(_) => {
-                println!(
-                    "broadcast_mint succeeded (block: {}, nullifier: {:?})",
-                    block.header.number, nullifier_u256,
-                );
-            }
-            Err(e) => {
-                eprintln!(
-                    "broadcast_mint failed: {} (block: {}, nullifier: {:?})",
-                    e, block.header.number, nullifier_u256,
-                );
-            }
-        }
+            .await?;
+
         Ok(())
     }
 }
