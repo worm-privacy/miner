@@ -7,6 +7,8 @@ edition = "2024"
 alloy = { version = "1.0.17", features = ["getrandom", "rlp"] }
 alloy-rlp = "0.3.12"
 anyhow = "1.0.98"
+axum = "0.8.4"
+axum-test = "18.1.0"
 ff = { version = "0.13.1", features = ["derive"] }
 homedir = "0.3.5"
 lazy_static = "1.5.0"
@@ -19,3 +21,12 @@ structopt = "0.3.26"
 tempfile = "3.20.0"
 tokio = { version = "1.46.1", features = ["full"] }
 worm-witness-gens = { git = "https://github.com/worm-privacy/witness" }
+
+tower-http = { version = "0.5", features = ["trace","cors"] }
+uuid = { version = "1", features = ["v4"] }
+dashmap = "5.5"
+tower = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+futures = "0.3.31"
+dotenvy = "0.15.7"

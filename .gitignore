@@ -3,3 +3,4 @@ Cargo.lock
 *.json
 *.wtns
 *.log
+/examples

@@ -3,9 +3,14 @@ use alloy::{
     primitives::{Address, U256, keccak256},
     rlp::RlpDecodable,
     rpc::types::EIP1186AccountProofResponse,
+        providers::Provider,
+
 };
+use std::path::{Path, PathBuf};
+use anyhow::Result;
 use anyhow::anyhow;
 use serde_json::json;
+use std::fs;
 
 use alloy::sol;
 
@@ -13,7 +18,13 @@ use crate::poseidon;
 use alloy_rlp::Decodable;
 use ff::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
-
+use crate::constants::{poseidon_nullifier_prefix,poseidon_coin_prefix};
+use crate::poseidon::{poseidon2,poseidon3};
+use crate::fp::{FpRepr};
+use alloy::{
+    eips::BlockId,
+    rlp::Encodable,
+};
 sol!(
     #[allow(missing_docs)]
     #[sol(rpc)]
@@ -73,10 +84,155 @@ pub fn generate_burn_address(
     Address::from_slice(&hash_be)
 }
 
+pub fn compute_remaining_coin(burn_key: Fp, amount: U256, fee: U256, spend: U256) -> Result<(Fp, U256),anyhow::Error> {
+    if fee + spend > amount {
+        return Err(anyhow!("Sum of fee + spend must be <= amount"));
+    }
+    let c = poseidon_coin_prefix();
+    let rem_fp = Fp::from_repr(FpRepr((amount - fee - spend).to_le_bytes::<32>())).unwrap();
+    let rem_coin = poseidon3(c, burn_key, rem_fp);
+    let rem_u256 = U256::from_le_bytes(rem_coin.to_repr().0);
+    Ok((rem_fp, rem_u256))
+}
+
+pub fn compute_previous_coin(burn_key: Fp, amount: U256) -> Result<(Fp, U256),anyhow::Error> {
+    
+    let c = poseidon_coin_prefix();
+    let previous_fp = Fp::from_repr(FpRepr((amount).to_le_bytes::<32>())).unwrap();
+    let previous_coin = poseidon3(c, burn_key, previous_fp);
+    let previous_u256 = U256::from_le_bytes(previous_coin.to_repr().0);
+    Ok((previous_fp, previous_u256))
+}
+
+
+pub fn compute_nullifier(burn_key: Fp) -> (Fp, U256) {
+    let c = poseidon_nullifier_prefix();
+    let nf_fp = poseidon2(c, burn_key);
+    let nf_u256 = U256::from_le_bytes(nf_fp.to_repr().0);
+    (nf_fp, nf_u256)
+}
+
+
 #[derive(Debug, RlpDecodable, PartialEq)]
 struct RlpLeaf {
     key: alloy::rlp::Bytes,
     value: alloy::rlp::Bytes,
+}
+
+pub async fn generate_input_file<P: Provider>(
+    provider: &P,
+    header_bytes: Vec<u8>,
+    burn_addr: Address,
+    burn_key: Fp,
+    fee: U256,
+    spend: U256,
+    wallet_addr: Address,
+    input_path: impl AsRef<Path>,
+) -> Result<()> {
+    let proof = provider.get_proof(burn_addr, vec![]).await?;
+    let json = input_file(proof, header_bytes, burn_key, fee, spend, wallet_addr)?.to_string();
+    std::fs::write(input_path.as_ref(), json)?;
+    Ok(())
+}
+
+pub async fn fetch_block_and_header_bytes<P: Provider>(
+    provider: &P,
+) -> Result<(u64, Vec<u8>)> {
+    let block = provider
+        .get_block(BlockId::latest())
+        .await?
+        .ok_or(anyhow!("Block not found!"))?;
+
+    let mut header_bytes = Vec::new();
+    block.header.inner.encode(&mut header_bytes);
+
+    println!("Generated proof for block #{}", block.header.number);
+    Ok((block.header.number, header_bytes))
+}
+
+pub async fn build_and_prove_burn<P: Provider>(
+    provider: &P,
+    params_dir: &Path,
+    header_bytes: Vec<u8>,
+    burn_addr: Address,
+    burn_key: Fp,
+    fee: U256,
+    spend: U256,
+    wallet_addr: Address,
+    input_json_path: &str,
+    witness_path: &str,
+) -> Result<(RapidsnarkOutput, PathBuf)> {
+    // 1) input.json (delegated)
+    generate_input_file(
+        provider,
+        header_bytes,
+        burn_addr,
+        burn_key,
+        fee,
+        spend,
+        wallet_addr,
+        input_json_path,
+    )
+    .await?;
+
+    // 2) witness
+    let proc_path = std::env::current_exe().expect("Failed to get current exe path");
+    println!("Generating witness.wtns file at: {}", witness_path);
+    let output = std::process::Command::new(&proc_path)
+        .arg("generate-witness")
+        .arg("proof-of-burn")
+        .arg("--input")
+        .arg(input_json_path)
+        .arg("--dat")
+        .arg(params_dir.join("proof_of_burn.dat"))
+        .arg("--witness")
+        .arg(witness_path)
+        .output()?;
+    output.status.success().then_some(()).ok_or_else(|| {
+        anyhow!(
+            "Failed to generate witness file: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })?;
+
+    // 3) rapidsnark
+    println!("Generating proof...");
+    let out_path: PathBuf = std::env::current_dir()?.join("rapidsnark_output.json");
+    if out_path.exists() {
+        let _ = std::fs::remove_file(&out_path);
+    }
+    println!("[compute_proof] Running rapidsnark -> {}", out_path.display());
+    let raw_output = std::process::Command::new(&proc_path)
+        .arg("rapidsnark")
+        .arg("--zkey")
+        .arg(params_dir.join("proof_of_burn.zkey"))
+        .arg("--witness")
+        .arg(witness_path)
+        .arg("--out")
+        .arg(&out_path)
+        .output()?;
+
+    println!(
+        "[rapidsnark] stderr:\n{}",
+        String::from_utf8_lossy(&raw_output.stderr)
+    );
+    raw_output.status.success().then_some(()).ok_or_else(|| {
+        anyhow!(
+            "Failed to generate proof: {}",
+            String::from_utf8_lossy(&raw_output.stderr)
+        )
+    })?;
+    println!(
+        "[Rapidsnark] output: {}",
+        String::from_utf8_lossy(&raw_output.stdout)
+    );
+
+    // 4) parse
+    let json_bytes = fs::read(&out_path)?;
+    let json_output: RapidsnarkOutput = serde_json::from_slice(&json_bytes)?;
+    println!("Generated proof successfully!");
+
+    Ok((json_output, out_path))
 }
 
 pub fn input_file(

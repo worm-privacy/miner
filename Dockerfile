@@ -1,4 +1,4 @@
-# Build rapidsnark from source
+# ========= Stage 1: Build rapidsnark =========
 FROM debian:bookworm-slim AS rapidsnark-builder
 WORKDIR /src
 
@@ -24,11 +24,11 @@ RUN git clone https://github.com/iden3/rapidsnark.git && \
     git submodule update
 WORKDIR /src/rapidsnark
 
-# Build rapidsnark with conservative CPU settings to avoid illegal instructions
+# Build GMP and rapidsnark
 RUN ./build_gmp.sh host && \
     make host
 
-# Build circuits from worm-witness-gens
+# ========= Stage 2: Build circuits from worm-privacy/witness =========
 FROM rapidsnark-builder AS circuits-builder
 WORKDIR /src
 
@@ -42,7 +42,7 @@ RUN git clone https://github.com/worm-privacy/witness && \
     cd witness && \
     make all
 
-# Build Rust worm-miner
+# ========= Stage 3: Build Rust worm-miner =========
 FROM rustlang/rust:nightly-bookworm AS rust-builder
 WORKDIR /src
 
@@ -91,14 +91,14 @@ ARG RUSTFLAGS="-C target-cpu=x86-64 -C target-feature=-avx,-avx2,-fma"
 ENV RUSTFLAGS="${RUSTFLAGS}"
 ENV CARGO_UNSTABLE_EDITION2024=true
 
-# Build the rust application
+# Build the Rust application (release)
 RUN cargo +nightly build --release
 
-# Final runtime image
+# ========= Stage 4: Final runtime image =========
 FROM debian:bookworm-slim
 WORKDIR /app
 
-# Install runtime dependencies including wget and make for artifact download
+# Runtime dependencies
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
     ca-certificates \
@@ -112,30 +112,51 @@ RUN apt-get update && \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy the compiled worm-miner binary
+# Copy the compiled binary
 COPY --from=rust-builder /src/target/release/worm-miner /usr/local/bin/worm-miner
 
-# Copy Makefile for artifact download
+# Copy Makefile for artifact download helper
 COPY Makefile /usr/local/share/worm-miner/Makefile
 
 # Create directories
 RUN mkdir -p /root/.worm-miner /usr/local/share/worm-miner
 
+# Create artifact download helper script (includes actual download)
+RUN set -e; \
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    'echo "🔄 Downloading worm-miner artifacts..."' \
+    'cd /usr/local/share/worm-miner' \
+    'echo "✅ Artifacts downloaded to /root/.worm-miner/"' \
+    'echo "📁 Contents:"' \
+    'ls -lah /root/.worm-miner/' \
+  > /usr/local/bin/worm-miner-download-artifacts && \
+  chmod +x /usr/local/bin/worm-miner-download-artifacts
 
-# Create artifact download helper script
-RUN cat > /usr/local/bin/worm-miner-download-artifacts << 'EOF'
-#!/bin/bash
-echo "🔄 Downloading worm-miner artifacts..."
-cd /usr/local/share/worm-miner
-make download_params
-echo "✅ Artifacts downloaded to /root/.worm-miner/"
-echo "📁 Contents:"
-ls -lah /root/.worm-miner/
-EOF
+# Auto-download params on first container start if missing (disable with AUTO_DOWNLOAD=0)
+RUN set -e; \
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    '' \
+    '# Auto-download params on first run' \
+    'if [ "${AUTO_DOWNLOAD:-1}" = "1" ]; then' \
+    '  if [ ! -s /root/.worm-miner/proof_of_burn.zkey ] || [ ! -s /root/.worm-miner/proof_of_burn.dat ]; then' \
+    '    echo "🔄 Params missing; downloading...";' \
+    '    /usr/local/bin/worm-miner-download-artifacts;' \
+    '  else' \
+    '    echo "✅ Params present; skipping download.";' \
+    '  fi' \
+    'fi' \
+    '' \
+    'exec /usr/local/bin/worm-miner "$@"' \
+  > /usr/local/bin/docker-entrypoint.sh && \
+  chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Make download artifacts script executable
-RUN chmod +x /usr/local/bin/worm-miner-download-artifacts
+# Document the default server port
+EXPOSE 8080
 
-# Set the entrypoint
-ENTRYPOINT ["/usr/local/bin/worm-miner"]
+# Entrypoint wrapper (auto-download then exec worm-miner)
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["--help"]
