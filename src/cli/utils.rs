@@ -44,9 +44,8 @@ pub fn burn_file(
     burn_key: Fp,
     fee: U256,
     network: &str,
-    spend:U256,
+    spend: U256,
 ) -> Result<Value> {
-    
     Ok(json!({
         "id": coin_id.to_string(),
         "burnKey": U256::from_le_bytes(burn_key.to_repr().0).to_string(),

@@ -4,7 +4,6 @@ use alloy::primitives::utils::parse_ether;
 use anyhow::Result;
 use structopt::StructOpt;
 
-
 #[derive(StructOpt)]
 pub struct BurnOpt {
     #[structopt(flatten)]
@@ -25,16 +24,16 @@ impl BurnOpt {
         let fee = parse_ether(&self.fee)?;
         let spend = parse_ether(&self.spend)?;
 
-        let (burn_key, burn_addr, _nullifier_fp,nullifier_u256, remaining_coin_val, remaining_coin_u256) =
-            self.common_opt
-                .prepare_inputs(amount, fee, spend)
-                .await?;
+        let (
+            burn_key,
+            burn_addr,
+            _nullifier_fp,
+            nullifier_u256,
+            remaining_coin_val,
+            remaining_coin_u256,
+        ) = self.common_opt.prepare_inputs(amount, fee, spend).await?;
 
-
-        let (_tx_hash, _ok) = self
-            .common_opt
-            .send_burn_tx(burn_addr, amount)
-            .await?;
+        let (_tx_hash, _ok) = self.common_opt.send_burn_tx(burn_addr, amount).await?;
         self.common_opt.persist_burn_data(
             params_dir,
             burn_key,
@@ -43,6 +42,7 @@ impl BurnOpt {
             Some(spend),
             false,
         )?;
+        println!("Your Burn address:{:?}", burn_addr);
         let (proof, block_number, _out_json_path) = self
             .common_opt
             .build_and_prove_burn(

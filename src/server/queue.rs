@@ -1,9 +1,9 @@
-use tokio::sync::mpsc::{channel, Receiver, Sender, error::TrySendError};
-use uuid::Uuid;
 use std::sync::{
     Arc,
-    atomic::{AtomicUsize,Ordering}
+    atomic::{AtomicUsize, Ordering},
 };
+use tokio::sync::mpsc::{Receiver, Sender, channel, error::TrySendError};
+use uuid::Uuid;
 
 use crate::server::types::ProofInput;
 #[derive(Clone)]
@@ -29,7 +29,9 @@ impl JobQueue {
         )
     }
     pub fn submit(&self, job_id: Uuid, input: ProofInput) -> Result<(), QueueError> {
-        self.sender.try_send((job_id, input)).map_err(QueueError::from)?;
+        self.sender
+            .try_send((job_id, input))
+            .map_err(QueueError::from)?;
         self.queued.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }

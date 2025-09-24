@@ -8,34 +8,31 @@ mod participate;
 mod recover;
 mod spend;
 mod utils;
+use crate::cli::utils::{append_new_entry, burn_file, coins_file, init_coins_file, next_id};
+use crate::constants::poseidon_burn_address_prefix;
 use crate::fp::Fp;
-use crate::utils::{RapidsnarkOutput,build_and_prove_burn};
+use crate::utils::{RapidsnarkOutput, build_and_prove_burn_logic};
+use crate::utils::{
+    compute_nullifier, compute_previous_coin, compute_remaining_coin, fetch_block_and_header_bytes,
+    find_burn_key, generate_burn_address, get_account_proof,
+};
 use alloy::signers::local::PrivateKeySigner;
+use alloy::{
+    hex::ToHexExt,
+    network::TransactionBuilder,
+    primitives::utils::{format_ether, parse_ether},
+    rpc::types::TransactionRequest,
+};
 use alloy::{
     primitives::{Address, U256},
     providers::{Provider, ProviderBuilder},
 };
 use anyhow::anyhow;
+use ff::PrimeField;
 use reqwest::Url;
 use serde_json::json;
-use structopt::StructOpt;
-use crate::cli::utils::{
-    append_new_entry, burn_file, coins_file, init_coins_file, next_id,
-};
-use crate::constants::{
-    poseidon_burn_address_prefix,
-};
-use crate::utils::{find_burn_key, generate_burn_address,compute_nullifier,compute_remaining_coin,compute_previous_coin,fetch_block_and_header_bytes};
-use alloy::{
-    hex::ToHexExt,
-    network::TransactionBuilder,
-    primitives::{
-        utils::{format_ether, parse_ether},
-    },
-    rpc::types::TransactionRequest,
-};
-use ff::PrimeField;
 use std::path::PathBuf;
+use structopt::StructOpt;
 
 use anyhow::Result;
 
@@ -177,7 +174,6 @@ impl CommonOpt {
         Ok(())
     }
 
-    
     pub async fn write_spend_input_json<P: AsRef<Path>>(
         &self,
         burn_key: Fp,
@@ -205,17 +201,18 @@ impl CommonOpt {
         Ok(())
     }
 
-
     pub async fn prepare_inputs(
         &self,
         amount: U256,
         fee: U256,
         spend: U256,
-    ) -> Result<(Fp, Address, Fp,U256, Fp, U256)> {
+    ) -> Result<(Fp, Address, Fp, U256, Fp, U256)> {
         let rt = self.setup().await?;
 
         if fee + spend > amount {
-            return Err(anyhow!("Sum of --fee and --spend should be less than --amount!"));
+            return Err(anyhow!(
+                "Sum of --fee and --spend should be less than --amount!"
+            ));
         }
         if amount > parse_ether("1")? {
             return Err(anyhow!("Can't burn more than 1 ETH in a single call!"));
@@ -265,7 +262,6 @@ impl CommonOpt {
         Ok((burn_addr, nullifier_fp))
     }
 
-
     /// 2) Send ETH to burn address & check the receipt
     pub async fn send_burn_tx(
         &self,
@@ -313,19 +309,18 @@ impl CommonOpt {
     ) -> Result<(RapidsnarkOutput, u64, PathBuf)> {
         let rt = self.setup().await?;
 
-        let (block_number, header_bytes) = fetch_block_and_header_bytes(&rt.provider).await?;
-
-        let (proof, out_path) = build_and_prove_burn(
-            &rt.provider,
+        let (block_number, header_bytes) = fetch_block_and_header_bytes(&rt.provider, None).await?;
+        let account_proof = get_account_proof(&rt.provider, burn_addr).await?;
+        let (proof, out_path) = build_and_prove_burn_logic(
             params_dir,
             header_bytes,
-            burn_addr,
             burn_key,
             fee,
             spend,
             rt.wallet_address,
             input_json_path,
             witness_path,
+            account_proof,
         )
         .await?;
 
@@ -344,7 +339,11 @@ impl CommonOpt {
         if !coins_only {
             let (fee, spend) = match (fee, spend) {
                 (Some(f), Some(s)) => (f, s),
-                _ => return Err(anyhow!("fee and spend are required when coins_only == false")),
+                _ => {
+                    return Err(anyhow!(
+                        "fee and spend are required when coins_only == false"
+                    ));
+                }
             };
             let burn_path = params_dir.join("burn.json");
             init_coins_file(&burn_path)?;
@@ -382,11 +381,9 @@ impl CommonOpt {
         }
 
         let (_remaining_fp, remaining_coin_u256) =
-        compute_remaining_coin(burn_key, balance, fee, spend)?;
+            compute_remaining_coin(burn_key, balance, fee, spend)?;
         Ok((_remaining_fp, remaining_coin_u256))
     }
-
-
 
     pub fn spend_prepare_from_coin(
         &self,
@@ -400,12 +397,10 @@ impl CommonOpt {
                 "Sum of --fee and --amount should be less than or equal to the original amount!"
             ));
         }
-        let (_previous_fp, previous_coin_u256) =
-        compute_previous_coin(burn_key, original_amount)?;
-
+        let (_previous_fp, previous_coin_u256) = compute_previous_coin(burn_key, original_amount)?;
 
         let (_remaining_fp, remaining_coin_u256) =
-        compute_remaining_coin(burn_key, original_amount, fee, out_amount)?;
+            compute_remaining_coin(burn_key, original_amount, fee, out_amount)?;
 
         Ok((previous_coin_u256, _remaining_fp, remaining_coin_u256))
     }
@@ -455,12 +450,14 @@ impl CommonOpt {
 
         // 3) Run rapidsnark with spend.zkey
         println!("Generating proof...");
-        let out_path: std::path::PathBuf =
-            std::env::current_dir()?.join("rapidsnark_output.json");
+        let out_path: std::path::PathBuf = std::env::current_dir()?.join("rapidsnark_output.json");
         if out_path.exists() {
             let _ = std::fs::remove_file(&out_path);
         }
-        println!("[compute_proof] Running rapidsnark -> {}", out_path.display());
+        println!(
+            "[compute_proof] Running rapidsnark -> {}",
+            out_path.display()
+        );
         let raw_output = std::process::Command::new(&proc_path)
             .arg("rapidsnark")
             .arg("--zkey")
@@ -492,9 +489,6 @@ impl CommonOpt {
         println!("Generated proof successfully!");
         Ok(output)
     }
-
-
-    
 }
 
 use crate::networks::{NETWORKS, Network};
@@ -502,9 +496,9 @@ pub use burn::BurnOpt;
 pub use claim::ClaimOpt;
 pub use generate_witness::GenerateWitnessOpt;
 pub use info::InfoOpt;
+pub use ls::LsCommand;
 pub use ls::LsOpt;
 pub use mine::MineOpt;
 pub use participate::ParticipateOpt;
 pub use recover::RecoverOpt;
 pub use spend::SpendOpt;
-pub use ls::LsCommand;

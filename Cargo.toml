@@ -30,3 +30,12 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 futures = "0.3.31"
 dotenvy = "0.15.7"
+
+
+rlp-derive = "0.2.0"
+hex-literal = "1.0.0"
+primitive-types={version = "0.12.2",default-features = false, features = ["rlp"]}
+rlp = "0.5"
+ethereum-triedb = "0.1.1"
+trie-db="0.28.0"  
+ethers = "2.0.14"

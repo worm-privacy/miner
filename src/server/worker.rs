@@ -1,19 +1,17 @@
 use crate::server::{
-    types::{ProofInput,JobStatus},
     proof_logic::compute_proof,
     queue::JobQueue,
+    types::{JobStatus, ProofInput},
 };
 use dashmap::DashMap;
+use std::sync::Arc;
+use tokio::sync::mpsc::Receiver;
 use uuid::Uuid;
-use tokio::sync::mpsc::{
-    Receiver,
-};
-use std::{sync::Arc};
 
 pub fn spawn_job_worker(
     mut receiver: Receiver<(Uuid, ProofInput)>,
     jobs: Arc<DashMap<Uuid, JobStatus>>,
-    job_queue: JobQueue, 
+    job_queue: JobQueue,
 ) {
     tokio::spawn(async move {
         while let Some((job_id, input)) = receiver.recv().await {
@@ -23,13 +21,10 @@ pub fn spawn_job_worker(
             println!("[worker] picked job {}", job_id);
             jobs.insert(job_id, JobStatus::InProgress);
 
-            
             let handle = tokio::runtime::Handle::current();
-            let res = tokio::task::spawn_blocking(move || {
-                handle.block_on(compute_proof(input))
-            })
-            .await; 
-            
+            let res =
+                tokio::task::spawn_blocking(move || handle.block_on(compute_proof(input))).await;
+
             job_queue.dec_in_progress();
 
             match res {

@@ -4,15 +4,16 @@ use anyhow::{Context, bail};
 use serde_json::Value;
 
 use super::CommonOpt;
-use crate::cli::utils::{
-    check_required_files,
-};
+use crate::cli::utils::check_required_files;
 
-use crate::fp::{Fp};
-use std::fs;
-use alloy::{primitives::{U256,utils::parse_ether},hex};
+use crate::fp::Fp;
+use alloy::{
+    hex,
+    primitives::{U256, utils::parse_ether},
+};
 use anyhow::anyhow;
 use ff::PrimeField;
+use std::fs;
 
 #[derive(StructOpt)]
 pub enum RecoverOpt {
@@ -118,10 +119,7 @@ impl RecoverOpt {
 
         check_required_files(params_dir)?;
 
-        
-
-        let (burn_addr, nullifier_fp) =
-            common_opt.recover_prepare_from_key(burn_key, fee).await?;
+        let (burn_addr, nullifier_fp) = common_opt.recover_prepare_from_key(burn_key, fee).await?;
 
         println!(
             "Your burn-key as string: {}",
@@ -145,7 +143,7 @@ impl RecoverOpt {
             )
             .await?;
 
-        common_opt.persist_burn_data(params_dir, burn_key, remaining_coin_val,None,None,true)?;
+        common_opt.persist_burn_data(params_dir, burn_key, remaining_coin_val, None, None, true)?;
 
         let nullifier_u256 = U256::from_le_bytes(nullifier_fp.to_repr().0);
         common_opt
