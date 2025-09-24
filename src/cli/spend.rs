@@ -1,11 +1,9 @@
-
 use super::CommonOpt;
-use crate::cli::utils::{check_required_files};
-use crate::fp::{Fp,};
+use crate::cli::utils::check_required_files;
+use crate::fp::Fp;
 
-
-use alloy::primitives::{U256, Address, utils::parse_ether};
-use anyhow::{Result, Context, anyhow, bail};
+use alloy::primitives::{Address, U256, utils::parse_ether};
+use anyhow::{Context, Result, anyhow, bail};
 use serde_json::Value;
 use std::{fs, str::FromStr};
 use structopt::StructOpt;
@@ -40,9 +38,9 @@ impl SpendOpt {
             .with_context(|| format!("failed to read {}", coins_path.display()))?;
         let json: Value = serde_json::from_str(&data)
             .with_context(|| format!("failed to parse {} as JSON", coins_path.display()))?;
-        let arr = json.as_array().with_context(|| {
-            format!("expected {} to be a JSON array", coins_path.display())
-        })?;
+        let arr = json
+            .as_array()
+            .with_context(|| format!("expected {} to be a JSON array", coins_path.display()))?;
 
         let coin = arr
             .iter()
@@ -78,9 +76,9 @@ impl SpendOpt {
         let fee = parse_ether(&self.fee)?;
         let out_amount = parse_ether(&self.amount)?;
 
-        let (previous_coin_u256, remaining_coin_val_fp, remaining_coin_u256) =
-            self.common_opt
-                .spend_prepare_from_coin(burn_key_fp, original_amount_u256, out_amount, fee)?;
+        let (previous_coin_u256, remaining_coin_val_fp, remaining_coin_u256) = self
+            .common_opt
+            .spend_prepare_from_coin(burn_key_fp, original_amount_u256, out_amount, fee)?;
 
         let proof = self
             .common_opt
@@ -95,9 +93,15 @@ impl SpendOpt {
                 "spend_witness.wtns",
             )
             .await?;
-        
-        self.common_opt
-            .persist_burn_data(params_dir, burn_key_fp, remaining_coin_val_fp,None,None,true)?;
+
+        self.common_opt.persist_burn_data(
+            params_dir,
+            burn_key_fp,
+            remaining_coin_val_fp,
+            None,
+            None,
+            true,
+        )?;
 
         self.common_opt
             .broadcast_spend(
@@ -109,7 +113,7 @@ impl SpendOpt {
                 self.receiver,
             )
             .await?;
-        
+
         Ok(())
     }
 }

@@ -1,19 +1,16 @@
+use alloy::rpc::types::EIP1186AccountProofResponse;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc};
-use uuid::Uuid;
-use alloy::{ rpc::types::EIP1186AccountProofResponse};
 use serde_json::Value;
+use std::sync::Arc;
+use uuid::Uuid;
 
-
-use crate::server::queue::{JobQueue};
-
+use crate::server::queue::JobQueue;
 
 #[derive(Serialize)]
 pub struct JobResponse {
     pub job_id: String,
 }
-
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct ProofInput {
@@ -23,8 +20,8 @@ pub struct ProofInput {
     pub spend: String,
     pub burn_key: String,
     pub wallet_address: String,
-    pub proof:Option<EIP1186AccountProofResponse>,
-    pub block_number:Option<u64>,
+    pub proof: Option<EIP1186AccountProofResponse>,
+    pub block_number: Option<u64>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -39,8 +36,6 @@ pub struct ProofOutput {
     pub wallet_address: String,
 }
 
-
-
 #[derive(Serialize)]
 pub struct ApiResponse<T> {
     pub status: String,
@@ -48,7 +43,6 @@ pub struct ApiResponse<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<T>,
 }
-
 
 #[derive(Clone)]
 pub struct AppState {

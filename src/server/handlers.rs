@@ -1,19 +1,16 @@
 use axum::{
     Json,
     extract::{Path, State},
+    http::StatusCode,
     response::IntoResponse,
-    http::{StatusCode}
 };
-
 
 use uuid::Uuid;
 
-
 use crate::server::{
-    types::{AppState,JobStatus,ApiResponse,JobResponse,ProofInput,ProofOutput},
     queue::QueueError,
+    types::{ApiResponse, AppState, JobResponse, JobStatus, ProofInput, ProofOutput},
 };
-
 
 pub async fn start_proof(
     State(state): State<AppState>,
@@ -24,7 +21,8 @@ pub async fn start_proof(
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<JobResponse> {
                 status: "error".into(),
-                message: "Either provide both `proof` and `block_number`, or leave both empty.".into(),
+                message: "Either provide both `proof` and `block_number`, or leave both empty."
+                    .into(),
                 result: None,
             }),
         );
@@ -33,10 +31,10 @@ pub async fn start_proof(
 
     state.jobs.insert(job_id, JobStatus::Pending);
 
-   match state.job_queue.submit(job_id, payload) {
+    match state.job_queue.submit(job_id, payload) {
         Ok(()) => {
             let queued_now = state.job_queue.queued_len();
-            let in_prog   = state.job_queue.in_progress();
+            let in_prog = state.job_queue.in_progress();
             let ahead = queued_now.saturating_sub(1) + in_prog;
             let position = ahead + 1;
 
@@ -47,7 +45,9 @@ pub async fn start_proof(
                 Json(ApiResponse {
                     status: "queued".into(),
                     message: msg,
-                    result: Some(JobResponse { job_id: job_id.to_string() }),
+                    result: Some(JobResponse {
+                        job_id: job_id.to_string(),
+                    }),
                 }),
             )
         }
@@ -75,7 +75,6 @@ pub async fn start_proof(
         }
     }
 }
-
 
 pub async fn poll_proof(
     Path(job_id): Path<String>,
@@ -110,7 +109,9 @@ pub async fn poll_proof(
                         StatusCode::OK,
                         Json(ApiResponse::<ProofOutput> {
                             status: "pending".into(),
-                            message: format!("Job is pending. You are approximately #{pos} in the queue."),
+                            message: format!(
+                                "Job is pending. You are approximately #{pos} in the queue."
+                            ),
                             result: None,
                         }),
                     )
@@ -119,7 +120,8 @@ pub async fn poll_proof(
                     StatusCode::OK,
                     Json(ApiResponse::<ProofOutput> {
                         status: "in_progress".into(),
-                        message: "Job is currently being processed. You are #1 in the queue.".into(),
+                        message: "Job is currently being processed. You are #1 in the queue."
+                            .into(),
                         result: None,
                     }),
                 ),

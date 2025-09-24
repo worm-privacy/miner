@@ -1,30 +1,25 @@
 use crate::constants::poseidon_burn_address_prefix;
 use crate::fp::Fp;
 use crate::server::types::{ProofInput, ProofOutput};
-use crate::utils::{RapidsnarkOutput};
-use crate::utils::{compute_nullifier,build_and_prove_burn_logic,get_account_proof ,compute_remaining_coin,fetch_block_and_header_bytes};
+use crate::server::verify_proof::verify_proof;
+use crate::utils::RapidsnarkOutput;
+use crate::utils::{
+    build_and_prove_burn_logic, compute_nullifier, compute_remaining_coin,
+    fetch_block_and_header_bytes, get_account_proof,
+};
 use alloy::{
     primitives::{Address, U256, utils::parse_ether},
     providers::{Provider, ProviderBuilder},
-    rpc::types::EIP1186AccountProofResponse
+    rpc::types::EIP1186AccountProofResponse,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use ff::PrimeField;
-use std::path::{Path};
+use std::path::Path;
 use std::str::FromStr;
-use crate::server::verify_proof::verify_proof;
 
-
-fn derive_burn_and_nullifier_from_input(input: &ProofInput) -> Result<(
-    Address, 
-    Fp,      
-    U256,    
-    U256,    
-    U256,    
-    Address, 
-    Fp,      
-    U256,  
-)> {
+fn derive_burn_and_nullifier_from_input(
+    input: &ProofInput,
+) -> Result<(Address, Fp, U256, U256, U256, Address, Fp, U256)> {
     let wallet_addr = Address::from_str(input.wallet_address.trim())
         .map_err(|e| anyhow!("Invalid wallet address: {}", e))?;
 
@@ -51,7 +46,6 @@ fn derive_burn_and_nullifier_from_input(input: &ProofInput) -> Result<(
     ))
 }
 
-
 async fn gen_input_witness_proof<P: Provider>(
     provider: &P,
     params_dir: &Path,
@@ -60,12 +54,12 @@ async fn gen_input_witness_proof<P: Provider>(
     fee: U256,
     spend: U256,
     wallet_addr: Address,
-    proof:Option<EIP1186AccountProofResponse>,
-    block_number:Option<u64>,
+    proof: Option<EIP1186AccountProofResponse>,
+    block_number: Option<u64>,
 ) -> Result<(RapidsnarkOutput, u64)> {
-    
-    let (block_number_val, header_bytes) = fetch_block_and_header_bytes(provider,block_number).await?;
-    
+    let (block_number_val, header_bytes) =
+        fetch_block_and_header_bytes(provider, block_number).await?;
+
     let proof = match (proof, block_number) {
         (Some(p), Some(block_number)) => {
             verify_proof(provider, p.clone(), block_number)
@@ -73,29 +67,25 @@ async fn gen_input_witness_proof<P: Provider>(
                 .map_err(|e| anyhow::anyhow!("Proof verification failed: {:?}", e))?;
             p
         }
-        (None, None) => {
-            get_account_proof(provider,burn_addr).await?
-        }
+        (None, None) => get_account_proof(provider, burn_addr).await?,
         _ => unreachable!(),
     };
     let effective_block_number = block_number.unwrap_or(block_number_val);
 
-
     let (proof, _out_path) = build_and_prove_burn_logic(
-            params_dir,
-            header_bytes,
-            burn_key_fp,
-            fee,
-            spend,
-            wallet_addr,
-            "input.json",
-            "witness.wtns",
-            proof,
-        )
-        .await?;
+        params_dir,
+        header_bytes,
+        burn_key_fp,
+        fee,
+        spend,
+        wallet_addr,
+        "input.json",
+        "witness.wtns",
+        proof,
+    )
+    .await?;
     Ok((proof, effective_block_number))
 }
-
 
 pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
     println!("[compute_proof] Starting proof generation job");
@@ -109,16 +99,8 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
     println!("[compute_proof] Connecting to provider...");
     let provider = ProviderBuilder::new().connect_http(net.rpc.clone());
 
-    let (
-        wallet_addr,
-        burn_key_fp,
-        fee,
-        spend,
-        amount,
-        burn_addr,
-        _nullifier_fp,
-        nullifier_u256,
-    ) = derive_burn_and_nullifier_from_input(&input)?;
+    let (wallet_addr, burn_key_fp, fee, spend, amount, burn_addr, _nullifier_fp, nullifier_u256) =
+        derive_burn_and_nullifier_from_input(&input)?;
 
     println!("[compute_proof] Burn address: {:?}", burn_addr);
 
@@ -135,7 +117,7 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
     let params_dir = homedir::my_home()?
         .ok_or(anyhow!("Can't find home directory"))?
         .join(".worm-miner");
-   
+
     let (json_output, block_number) = gen_input_witness_proof(
         &provider,
         &params_dir.as_path(),
@@ -161,4 +143,3 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
         wallet_address: input.wallet_address,
     })
 }
-
