@@ -43,6 +43,7 @@ impl BurnOpt {
             Some(spend),
             false,
         )?;
+        println!("Your Burn address:{:?}",burn_addr);
         let (proof, block_number, _out_json_path) = self
             .common_opt
             .build_and_prove_burn(
