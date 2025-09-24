@@ -13,10 +13,22 @@ use crate::server::{
     types::{AppState,JobStatus,ApiResponse,JobResponse,ProofInput,ProofOutput},
     queue::QueueError,
 };
+
+
 pub async fn start_proof(
     State(state): State<AppState>,
     Json(payload): Json<ProofInput>,
 ) -> impl IntoResponse {
+    if payload.proof.is_some() != payload.block_number.is_some() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<JobResponse> {
+                status: "error".into(),
+                message: "Either provide both `proof` and `block_number`, or leave both empty.".into(),
+                result: None,
+            }),
+        );
+    }
     let job_id = Uuid::new_v4();
 
     state.jobs.insert(job_id, JobStatus::Pending);

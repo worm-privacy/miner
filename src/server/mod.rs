@@ -3,7 +3,7 @@ pub mod proof_logic;
 pub mod handlers;
 pub mod worker;
 pub mod queue;
-
+pub mod verify_proof;
 
 
 use anyhow::Result;

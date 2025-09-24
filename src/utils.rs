@@ -1,11 +1,12 @@
 use crate::fp::Fp;
 use alloy::{
-    primitives::{Address, U256, keccak256},
+    primitives::{keccak256, Address, U256}, 
+    providers::Provider, 
     rlp::RlpDecodable,
     rpc::types::EIP1186AccountProofResponse,
-        providers::Provider,
-
 };
+use alloy::rpc::types::BlockNumberOrTag;
+
 use std::path::{Path, PathBuf};
 use anyhow::Result;
 use anyhow::anyhow;
@@ -13,7 +14,6 @@ use serde_json::json;
 use std::fs;
 
 use alloy::sol;
-
 use crate::poseidon;
 use alloy_rlp::Decodable;
 use ff::{Field, PrimeField};
@@ -119,17 +119,15 @@ struct RlpLeaf {
     value: alloy::rlp::Bytes,
 }
 
-pub async fn generate_input_file<P: Provider>(
-    provider: &P,
+pub async fn generate_input_file(
     header_bytes: Vec<u8>,
-    burn_addr: Address,
     burn_key: Fp,
     fee: U256,
     spend: U256,
     wallet_addr: Address,
     input_path: impl AsRef<Path>,
+    proof:EIP1186AccountProofResponse,
 ) -> Result<()> {
-    let proof = provider.get_proof(burn_addr, vec![]).await?;
     let json = input_file(proof, header_bytes, burn_key, fee, spend, wallet_addr)?.to_string();
     std::fs::write(input_path.as_ref(), json)?;
     Ok(())
@@ -137,41 +135,60 @@ pub async fn generate_input_file<P: Provider>(
 
 pub async fn fetch_block_and_header_bytes<P: Provider>(
     provider: &P,
+    block_number:Option<u64>,
 ) -> Result<(u64, Vec<u8>)> {
-    let block = provider
+    let block = match block_number {
+        Some(block_number) => {
+            let block = provider
+        .get_block_by_number(BlockNumberOrTag::Number(block_number))
+        .await?
+        .expect("block not found");
+    block
+        },
+        None => {
+            let block = provider
         .get_block(BlockId::latest())
         .await?
         .ok_or(anyhow!("Block not found!"))?;
+    block
+        }
+    };
+    
 
     let mut header_bytes = Vec::new();
     block.header.inner.encode(&mut header_bytes);
 
-    println!("Generated proof for block #{}", block.header.number);
     Ok((block.header.number, header_bytes))
 }
-
-pub async fn build_and_prove_burn<P: Provider>(
+pub async fn get_account_proof<P: Provider>(
     provider: &P,
+    burn_addr: Address,
+) -> Result<EIP1186AccountProofResponse> {
+    let proof = provider.get_proof(burn_addr, vec![]).await?;
+    Ok(proof)
+}
+
+
+pub async fn build_and_prove_burn_logic(
     params_dir: &Path,
     header_bytes: Vec<u8>,
-    burn_addr: Address,
     burn_key: Fp,
     fee: U256,
     spend: U256,
     wallet_addr: Address,
     input_json_path: &str,
     witness_path: &str,
+    proof:EIP1186AccountProofResponse,
 ) -> Result<(RapidsnarkOutput, PathBuf)> {
     // 1) input.json (delegated)
     generate_input_file(
-        provider,
         header_bytes,
-        burn_addr,
         burn_key,
         fee,
         spend,
         wallet_addr,
         input_json_path,
+        proof,
     )
     .await?;
 

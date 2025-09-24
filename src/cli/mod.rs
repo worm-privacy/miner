@@ -9,7 +9,7 @@ mod recover;
 mod spend;
 mod utils;
 use crate::fp::Fp;
-use crate::utils::{RapidsnarkOutput,build_and_prove_burn};
+use crate::utils::{RapidsnarkOutput,build_and_prove_burn_logic};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{
     primitives::{Address, U256},
@@ -25,7 +25,7 @@ use crate::cli::utils::{
 use crate::constants::{
     poseidon_burn_address_prefix,
 };
-use crate::utils::{find_burn_key, generate_burn_address,compute_nullifier,compute_remaining_coin,compute_previous_coin,fetch_block_and_header_bytes};
+use crate::utils::{find_burn_key,get_account_proof ,generate_burn_address,compute_nullifier,compute_remaining_coin,compute_previous_coin,fetch_block_and_header_bytes};
 use alloy::{
     hex::ToHexExt,
     network::TransactionBuilder,
@@ -313,19 +313,19 @@ impl CommonOpt {
     ) -> Result<(RapidsnarkOutput, u64, PathBuf)> {
         let rt = self.setup().await?;
 
-        let (block_number, header_bytes) = fetch_block_and_header_bytes(&rt.provider).await?;
-
-        let (proof, out_path) = build_and_prove_burn(
-            &rt.provider,
+        let (block_number, header_bytes) = fetch_block_and_header_bytes(&rt.provider,None).await?;
+        let account_proof = get_account_proof(&rt.provider,burn_addr).await?;
+        let (proof, out_path) = build_and_prove_burn_logic(
             params_dir,
             header_bytes,
-            burn_addr,
             burn_key,
             fee,
             spend,
             rt.wallet_address,
             input_json_path,
             witness_path,
+            account_proof
+
         )
         .await?;
 
