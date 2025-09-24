@@ -2,7 +2,7 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc};
 use uuid::Uuid;
-
+use alloy::{ rpc::types::EIP1186AccountProofResponse};
 use serde_json::Value;
 
 
@@ -23,6 +23,8 @@ pub struct ProofInput {
     pub spend: String,
     pub burn_key: String,
     pub wallet_address: String,
+    pub proof:Option<EIP1186AccountProofResponse>,
+    pub block_number:Option<u64>,
 }
 
 #[derive(Serialize, Debug, Clone)]
