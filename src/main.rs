@@ -16,8 +16,6 @@ use crate::cli::{
 mod utils;
 use crate::utils::{RapidsnarkOutput, RapidsnarkProof};
 
-use alloy::rlp::RlpDecodable;
-
 #[derive(StructOpt)]
 enum MinerOpt {
     Info(InfoOpt),
@@ -76,12 +74,6 @@ impl MinerOpt {
             }
         }
     }
-}
-
-#[derive(Debug, RlpDecodable, PartialEq)]
-struct RlpLeaf {
-    key: alloy::rlp::Bytes,
-    value: alloy::rlp::Bytes,
 }
 
 #[tokio::main]
