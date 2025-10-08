@@ -50,14 +50,22 @@ pub struct RapidsnarkOutput {
     pub public: Vec<U256>,
 }
 
-pub fn find_burn_key(pow_min_zero_bytes: usize, receiver_addr: Address, fee: U256) -> Fp {
+pub fn find_burn_key(
+    pow_min_zero_bytes: usize,
+    receiver_addr: Address,
+    prover_fee: U256,
+    broadcaster_fee: U256,
+    reveal: U256,
+) -> Fp {
     let mut curr: U256 = U256::from_le_bytes(Fp::random(ff::derive::rand_core::OsRng).to_repr().0);
     loop {
-        let mut inp: [u8; 92] = [0; 92];
+        let mut inp: [u8; 156] = [0; 156];
         inp[..32].copy_from_slice(&curr.to_be_bytes::<32>());
         inp[32..52].copy_from_slice(&receiver_addr.as_slice());
-        inp[52..84].copy_from_slice(&fee.to_be_bytes::<32>());
-        inp[84..].copy_from_slice(b"EIP-7503");
+        inp[52..84].copy_from_slice(&prover_fee.to_be_bytes::<32>());
+        inp[84..116].copy_from_slice(&broadcaster_fee.to_be_bytes::<32>());
+        inp[116..148].copy_from_slice(&reveal.to_be_bytes::<32>());
+        inp[148..].copy_from_slice(b"EIP-7503");
         let hash: U256 = keccak256(inp).into();
         if hash.leading_zeros() >= pow_min_zero_bytes * 8 {
             return Fp::from_be_bytes(&curr.to_be_bytes::<32>());
@@ -70,12 +78,25 @@ pub fn generate_burn_address(
     burn_addr_constant: Fp,
     burn_key: Fp,
     receiver: Address,
-    fee: U256,
+    prover_fee: U256,
+    broadcaster_fee: U256,
+    reveal: U256,
 ) -> Address {
     let receiver_fp = Fp::from_be_bytes(receiver.as_slice());
-    let fee_be: [u8; 32] = fee.to_be_bytes();
-    let fee_fp = Fp::from_be_bytes(&fee_be);
-    let hash = poseidon::poseidon4(burn_addr_constant, burn_key, receiver_fp, fee_fp);
+    let prover_fee_be: [u8; 32] = prover_fee.to_be_bytes();
+    let broadcaster_fee_be: [u8; 32] = broadcaster_fee.to_be_bytes();
+    let reveal_be: [u8; 32] = reveal.to_be_bytes();
+    let prover_fee_fp = Fp::from_be_bytes(&prover_fee_be);
+    let broadcaster_fee_fp = Fp::from_be_bytes(&broadcaster_fee_be);
+    let reveal_fp = Fp::from_be_bytes(&reveal_be);
+    let hash = poseidon::poseidon6(
+        burn_addr_constant,
+        burn_key,
+        receiver_fp,
+        prover_fee_fp,
+        broadcaster_fee_fp,
+        reveal_fp,
+    );
     let mut hash_be = hash.to_repr().0[12..32].to_vec();
     hash_be.reverse();
     Address::from_slice(&hash_be)
@@ -124,10 +145,20 @@ pub async fn generate_input_file(
     fee: U256,
     spend: U256,
     wallet_addr: Address,
+    prover: Address,
     input_path: impl AsRef<Path>,
     proof: EIP1186AccountProofResponse,
 ) -> Result<()> {
-    let json = input_file(proof, header_bytes, burn_key, fee, spend, wallet_addr)?.to_string();
+    let json = input_file(
+        proof,
+        header_bytes,
+        burn_key,
+        fee,
+        spend,
+        wallet_addr,
+        prover,
+    )?
+    .to_string();
     std::fs::write(input_path.as_ref(), json)?;
     Ok(())
 }
@@ -173,6 +204,7 @@ pub async fn build_and_prove_burn_logic(
     fee: U256,
     spend: U256,
     wallet_addr: Address,
+    prover: Address,
     input_json_path: &str,
     witness_path: &str,
     proof: EIP1186AccountProofResponse,
@@ -184,6 +216,7 @@ pub async fn build_and_prove_burn_logic(
         fee,
         spend,
         wallet_addr,
+        prover,
         input_json_path,
         proof,
     )
@@ -204,7 +237,7 @@ pub async fn build_and_prove_burn_logic(
         .output()?;
     output.status.success().then_some(()).ok_or_else(|| {
         anyhow!(
-            "Failed to generate witness file: {}",
+            "Failed to generate witness file: {}$",
             String::from_utf8_lossy(&output.stderr)
         )
     })?;
@@ -259,6 +292,7 @@ pub fn input_file(
     fee: U256,
     spend: U256,
     receiver: Address,
+    prover: Address,
 ) -> Result<serde_json::Value, anyhow::Error> {
     let max_layers = 16;
     let max_layer_len = 4 * 136;
@@ -295,6 +329,9 @@ pub fn input_file(
     let mut extended_header = header_bytes.to_vec();
     extended_header.resize(max_header_len, 0);
 
+    let extra_commitment =
+        U256::from_be_slice(keccak256(prover.as_slice()).as_slice()) >> U256::from(8);
+
     Ok(json!({
         "balance": proof.balance.to_string(),
         "numLayers": proof.account_proof.len(),
@@ -305,8 +342,10 @@ pub fn input_file(
         "receiverAddress": U256::from_be_slice(receiver.as_slice()).to_string(),
         "numLeafAddressNibbles": num_addr_hash_nibbles.to_string(),
         "burnKey": U256::from_le_bytes(burn_key.to_repr().0).to_string(),
-        "fee": fee.to_string(),
-        "spend": spend.to_string(),
-        "byteSecurityRelax": 0
+        "broadcasterFeeAmount": fee.to_string(),
+        "revealAmount": spend.to_string(),
+        "byteSecurityRelax": 0,
+        "proverFeeAmount": 0,
+        "_extraCommitment": extra_commitment.to_string()
     }))
 }

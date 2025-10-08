@@ -119,7 +119,9 @@ impl RecoverOpt {
 
         check_required_files(params_dir)?;
 
-        let (burn_addr, nullifier_fp) = common_opt.recover_prepare_from_key(burn_key, fee).await?;
+        let (burn_addr, nullifier_fp) = common_opt
+            .recover_prepare_from_key(burn_key, fee, spend)
+            .await?;
 
         println!(
             "Your burn-key as string: {}",

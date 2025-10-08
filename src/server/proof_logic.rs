@@ -30,7 +30,14 @@ fn derive_burn_and_nullifier_from_input(
     let burn_key_fp = Fp::from_str_vartime(&input.burn_key).ok_or(anyhow!("Invalid burn_key"))?;
 
     let burn_const = poseidon_burn_address_prefix();
-    let burn_addr = crate::utils::generate_burn_address(burn_const, burn_key_fp, wallet_addr, fee);
+    let burn_addr = crate::utils::generate_burn_address(
+        burn_const,
+        burn_key_fp,
+        wallet_addr,
+        U256::ZERO,
+        fee,
+        spend,
+    );
 
     let (nullifier_fp, nullifier_u256) = compute_nullifier(burn_key_fp);
 
@@ -78,6 +85,7 @@ async fn gen_input_witness_proof<P: Provider>(
         burn_key_fp,
         fee,
         spend,
+        wallet_addr,
         wallet_addr,
         "input.json",
         "witness.wtns",

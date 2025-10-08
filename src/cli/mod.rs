@@ -125,6 +125,8 @@ impl CommonOpt {
                 spend,
                 // user’s address
                 rt.wallet_address,
+                U256::ZERO,
+                rt.wallet_address,
             )
             .send()
             .await?
@@ -214,13 +216,13 @@ impl CommonOpt {
                 "Sum of --fee and --spend should be less than --amount!"
             ));
         }
-        if amount > parse_ether("1")? {
-            return Err(anyhow!("Can't burn more than 1 ETH in a single call!"));
+        if amount > parse_ether("10")? {
+            return Err(anyhow!("Can't burn more than 10 ETH in a single call!"));
         }
 
         // 1) burn_key
         println!("Generating a burn-key...");
-        let burn_key = find_burn_key(3, rt.wallet_address, fee);
+        let burn_key = find_burn_key(2, rt.wallet_address, U256::ZERO, fee, spend);
         println!("Your burn_key: {:?}", burn_key);
         println!(
             "Your burn-key as string: {}",
@@ -229,7 +231,14 @@ impl CommonOpt {
 
         // 2) burn address
         let burn_addr_prefix = poseidon_burn_address_prefix();
-        let burn_addr = generate_burn_address(burn_addr_prefix, burn_key, rt.wallet_address, fee);
+        let burn_addr = generate_burn_address(
+            burn_addr_prefix,
+            burn_key,
+            rt.wallet_address,
+            U256::ZERO,
+            fee,
+            spend,
+        );
 
         // 3) nullifier (Fp only needed by caller)
         let (nullifier_fp, nullifier_u256) = compute_nullifier(burn_key);
@@ -252,12 +261,19 @@ impl CommonOpt {
         &self,
         burn_key: Fp,
         fee: U256,
+        reveal: U256,
     ) -> anyhow::Result<(alloy::primitives::Address, Fp)> {
         let rt = self.setup().await?; // wallet addr + provider + network
         let burn_addr_prefix = crate::constants::poseidon_burn_address_prefix();
 
-        let burn_addr =
-            crate::utils::generate_burn_address(burn_addr_prefix, burn_key, rt.wallet_address, fee);
+        let burn_addr = crate::utils::generate_burn_address(
+            burn_addr_prefix,
+            burn_key,
+            rt.wallet_address,
+            U256::ZERO,
+            fee,
+            reveal,
+        );
         let (nullifier_fp, _nullifier_u256) = compute_nullifier(burn_key);
         Ok((burn_addr, nullifier_fp))
     }
@@ -317,6 +333,7 @@ impl CommonOpt {
             burn_key,
             fee,
             spend,
+            rt.wallet_address,
             rt.wallet_address,
             input_json_path,
             witness_path,
