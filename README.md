@@ -1,4 +1,5 @@
 # WORM miner
+[![Build](https://github.com/worm-privacy/miner/actions/workflows/build.yaml/badge.svg)](https://github.com/worm-privacy/miner/actions/workflows/build.yaml)
 
 Test on Debian/Ubuntu systems:
 
