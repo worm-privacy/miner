@@ -61,6 +61,7 @@ async fn gen_input_witness_proof<P: Provider>(
     fee: U256,
     spend: U256,
     wallet_addr: Address,
+    prover: Address,
     proof: Option<EIP1186AccountProofResponse>,
     block_number: Option<u64>,
 ) -> Result<(RapidsnarkOutput, u64)> {
@@ -86,7 +87,7 @@ async fn gen_input_witness_proof<P: Provider>(
         fee,
         spend,
         wallet_addr,
-        wallet_addr,
+        prover,
         "input.json",
         "witness.wtns",
         proof,
@@ -134,6 +135,7 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
         fee,
         spend,
         wallet_addr,
+        wallet_addr, // TODO: prover
         input.proof,
         input.block_number,
     )
@@ -146,8 +148,10 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
         block_number,
         nullifier_u256: nullifier_u256.to_string(),
         remaining_coin: remaining_coin_u256.to_string(),
-        fee: fee.to_string(),
-        spend: spend.to_string(),
+        broadcaster_fee: fee.to_string(),
+        prover_fee: "0".to_string(),
+        prover: wallet_addr.to_string(), // TODO: prover
+        reveal_amount: spend.to_string(),
         wallet_address: input.wallet_address,
     })
 }

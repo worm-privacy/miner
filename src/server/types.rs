@@ -31,8 +31,10 @@ pub struct ProofOutput {
     pub block_number: u64,
     pub nullifier_u256: String,
     pub remaining_coin: String,
-    pub fee: String,
-    pub spend: String,
+    pub broadcaster_fee: String,
+    pub prover_fee: String,
+    pub prover: String,
+    pub reveal_amount: String,
     pub wallet_address: String,
 }
 
