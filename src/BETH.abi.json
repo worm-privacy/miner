@@ -279,7 +279,7 @@
                     "internalType": "uint256"
                 },
                 {
-                    "name": "_fee",
+                    "name": "_broadcasterFee",
                     "type": "uint256",
                     "internalType": "uint256"
                 },

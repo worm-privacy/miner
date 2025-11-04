@@ -31,6 +31,7 @@ impl BurnOpt {
             nullifier_u256,
             remaining_coin_val,
             remaining_coin_u256,
+            burn_extra_commit,
         ) = self.common_opt.prepare_inputs(amount, fee, spend).await?;
 
         let (_tx_hash, _ok) = self.common_opt.send_burn_tx(burn_addr, amount).await?;
@@ -49,8 +50,8 @@ impl BurnOpt {
                 params_dir,
                 burn_addr,
                 burn_key,
-                fee,
                 spend,
+                burn_extra_commit,
                 "input.json",
                 "witness.wtns",
             )

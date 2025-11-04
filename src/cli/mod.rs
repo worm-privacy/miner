@@ -11,7 +11,7 @@ mod utils;
 use crate::cli::utils::{append_new_entry, burn_file, coins_file, init_coins_file, next_id};
 use crate::constants::poseidon_burn_address_prefix;
 use crate::fp::Fp;
-use crate::utils::{RapidsnarkOutput, build_and_prove_burn_logic};
+use crate::utils::{RapidsnarkOutput, build_and_prove_burn_logic, generate_burn_extra_commit};
 use crate::utils::{
     compute_nullifier, compute_previous_coin, compute_remaining_coin, fetch_block_and_header_bytes,
     find_burn_key, generate_burn_address, get_account_proof,
@@ -208,7 +208,7 @@ impl CommonOpt {
         amount: U256,
         fee: U256,
         spend: U256,
-    ) -> Result<(Fp, Address, Fp, U256, Fp, U256)> {
+    ) -> Result<(Fp, Address, Fp, U256, Fp, U256, U256)> {
         let rt = self.setup().await?;
 
         if fee + spend > amount {
@@ -222,7 +222,8 @@ impl CommonOpt {
 
         // 1) burn_key
         println!("Generating a burn-key...");
-        let burn_key = find_burn_key(2, rt.wallet_address, U256::ZERO, fee, spend);
+        let extra_commit = generate_burn_extra_commit(rt.wallet_address, U256::ZERO, fee);
+        let burn_key = find_burn_key(2, extra_commit, spend);
         println!("Your burn_key: {:?}", burn_key);
         println!(
             "Your burn-key as string: {}",
@@ -231,7 +232,7 @@ impl CommonOpt {
 
         // 2) burn address
         let burn_addr_prefix = poseidon_burn_address_prefix();
-        let burn_addr = generate_burn_address(
+        let (burn_addr, burn_extra_commit) = generate_burn_address(
             burn_addr_prefix,
             burn_key,
             rt.wallet_address,
@@ -254,6 +255,7 @@ impl CommonOpt {
             nullifier_u256,
             remaining_coin_val_fp,
             remaining_coin_u256,
+            burn_extra_commit,
         ))
     }
 
@@ -266,7 +268,7 @@ impl CommonOpt {
         let rt = self.setup().await?; // wallet addr + provider + network
         let burn_addr_prefix = crate::constants::poseidon_burn_address_prefix();
 
-        let burn_addr = crate::utils::generate_burn_address(
+        let (burn_addr, _burn_extra_commit) = crate::utils::generate_burn_address(
             burn_addr_prefix,
             burn_key,
             rt.wallet_address,
@@ -318,8 +320,8 @@ impl CommonOpt {
         params_dir: &Path,
         burn_addr: Address,
         burn_key: Fp,
-        fee: U256,
         spend: U256,
+        burn_extra_commit: U256,
         input_json_path: &str,
         witness_path: &str,
     ) -> Result<(RapidsnarkOutput, u64, PathBuf)> {
@@ -331,9 +333,8 @@ impl CommonOpt {
             params_dir,
             header_bytes,
             burn_key,
-            fee,
             spend,
-            rt.wallet_address,
+            burn_extra_commit,
             rt.wallet_address,
             input_json_path,
             witness_path,

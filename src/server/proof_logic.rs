@@ -19,7 +19,7 @@ use std::str::FromStr;
 
 fn derive_burn_and_nullifier_from_input(
     input: &ProofInput,
-) -> Result<(Address, Fp, U256, U256, U256, Address, Fp, U256)> {
+) -> Result<(Address, Fp, U256, U256, U256, Address, Fp, U256, U256)> {
     let wallet_addr = Address::from_str(input.wallet_address.trim())
         .map_err(|e| anyhow!("Invalid wallet address: {}", e))?;
 
@@ -30,7 +30,7 @@ fn derive_burn_and_nullifier_from_input(
     let burn_key_fp = Fp::from_str_vartime(&input.burn_key).ok_or(anyhow!("Invalid burn_key"))?;
 
     let burn_const = poseidon_burn_address_prefix();
-    let burn_addr = crate::utils::generate_burn_address(
+    let (burn_addr, extra_commit) = crate::utils::generate_burn_address(
         burn_const,
         burn_key_fp,
         wallet_addr,
@@ -50,6 +50,7 @@ fn derive_burn_and_nullifier_from_input(
         burn_addr,
         nullifier_fp,
         nullifier_u256,
+        extra_commit,
     ))
 }
 
@@ -58,9 +59,8 @@ async fn gen_input_witness_proof<P: Provider>(
     params_dir: &Path,
     burn_addr: Address,
     burn_key_fp: Fp,
-    fee: U256,
     spend: U256,
-    wallet_addr: Address,
+    burn_extra_commit: U256,
     prover: Address,
     proof: Option<EIP1186AccountProofResponse>,
     block_number: Option<u64>,
@@ -84,9 +84,8 @@ async fn gen_input_witness_proof<P: Provider>(
         params_dir,
         header_bytes,
         burn_key_fp,
-        fee,
         spend,
-        wallet_addr,
+        burn_extra_commit,
         prover,
         "input.json",
         "witness.wtns",
@@ -108,8 +107,17 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
     println!("[compute_proof] Connecting to provider...");
     let provider = ProviderBuilder::new().connect_http(net.rpc.clone());
 
-    let (wallet_addr, burn_key_fp, fee, spend, amount, burn_addr, _nullifier_fp, nullifier_u256) =
-        derive_burn_and_nullifier_from_input(&input)?;
+    let (
+        wallet_addr,
+        burn_key_fp,
+        fee,
+        spend,
+        amount,
+        burn_addr,
+        _nullifier_fp,
+        nullifier_u256,
+        burn_extra_commit,
+    ) = derive_burn_and_nullifier_from_input(&input)?;
 
     println!("[compute_proof] Burn address: {:?}", burn_addr);
 
@@ -132,9 +140,8 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
         &params_dir.as_path(),
         burn_addr,
         burn_key_fp,
-        fee,
         spend,
-        wallet_addr,
+        burn_extra_commit,
         wallet_addr, // TODO: prover
         input.proof,
         input.block_number,

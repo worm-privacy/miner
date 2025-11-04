@@ -1,5 +1,6 @@
 use crate::fp::Fp;
 use alloy::rpc::types::BlockNumberOrTag;
+use alloy::sol_types::SolValue;
 use alloy::{
     primitives::{Address, U256, keccak256},
     providers::Provider,
@@ -50,28 +51,29 @@ pub struct RapidsnarkOutput {
     pub public: Vec<U256>,
 }
 
-pub fn find_burn_key(
-    pow_min_zero_bytes: usize,
-    receiver_addr: Address,
-    prover_fee: U256,
-    broadcaster_fee: U256,
-    reveal: U256,
-) -> Fp {
+pub fn find_burn_key(pow_min_zero_bytes: usize, burn_extra_commit: U256, reveal: U256) -> Fp {
     let mut curr: U256 = U256::from_le_bytes(Fp::random(ff::derive::rand_core::OsRng).to_repr().0);
     loop {
-        let mut inp: [u8; 156] = [0; 156];
+        let mut inp: [u8; 104] = [0; 104];
         inp[..32].copy_from_slice(&curr.to_be_bytes::<32>());
-        inp[32..52].copy_from_slice(&receiver_addr.as_slice());
-        inp[52..84].copy_from_slice(&prover_fee.to_be_bytes::<32>());
-        inp[84..116].copy_from_slice(&broadcaster_fee.to_be_bytes::<32>());
-        inp[116..148].copy_from_slice(&reveal.to_be_bytes::<32>());
-        inp[148..].copy_from_slice(b"EIP-7503");
+        inp[32..64].copy_from_slice(&reveal.to_be_bytes::<32>());
+        inp[64..96].copy_from_slice(&burn_extra_commit.to_be_bytes::<32>());
+        inp[96..].copy_from_slice(b"EIP-7503");
         let hash: U256 = keccak256(inp).into();
         if hash.leading_zeros() >= pow_min_zero_bytes * 8 {
             return Fp::from_be_bytes(&curr.to_be_bytes::<32>());
         }
         curr += U256::ONE;
     }
+}
+
+pub fn generate_burn_extra_commit(
+    receiver: Address,
+    prover_fee: U256,
+    broadcaster_fee: U256,
+) -> U256 {
+    let extra_commit_preimage = (broadcaster_fee, prover_fee, receiver).abi_encode_packed();
+    U256::from_be_slice(keccak256(extra_commit_preimage.as_slice()).as_slice()) >> U256::from(8)
 }
 
 pub fn generate_burn_address(
@@ -81,25 +83,16 @@ pub fn generate_burn_address(
     prover_fee: U256,
     broadcaster_fee: U256,
     reveal: U256,
-) -> Address {
-    let receiver_fp = Fp::from_be_bytes(receiver.as_slice());
-    let prover_fee_be: [u8; 32] = prover_fee.to_be_bytes();
-    let broadcaster_fee_be: [u8; 32] = broadcaster_fee.to_be_bytes();
+) -> (Address, U256) {
     let reveal_be: [u8; 32] = reveal.to_be_bytes();
-    let prover_fee_fp = Fp::from_be_bytes(&prover_fee_be);
-    let broadcaster_fee_fp = Fp::from_be_bytes(&broadcaster_fee_be);
     let reveal_fp = Fp::from_be_bytes(&reveal_be);
-    let hash = poseidon::poseidon6(
-        burn_addr_constant,
-        burn_key,
-        receiver_fp,
-        prover_fee_fp,
-        broadcaster_fee_fp,
-        reveal_fp,
-    );
+    let extra_commitment = generate_burn_extra_commit(receiver, prover_fee, broadcaster_fee);
+    let extra_commitment_be: [u8; 32] = extra_commitment.to_be_bytes();
+    let extra_commitment_fp = Fp::from_be_bytes(&extra_commitment_be);
+    let hash = poseidon::poseidon4(burn_addr_constant, burn_key, reveal_fp, extra_commitment_fp);
     let mut hash_be = hash.to_repr().0[12..32].to_vec();
     hash_be.reverse();
-    Address::from_slice(&hash_be)
+    (Address::from_slice(&hash_be), extra_commitment)
 }
 
 pub fn compute_remaining_coin(
@@ -142,9 +135,8 @@ struct RlpLeaf {
 pub async fn generate_input_file(
     header_bytes: Vec<u8>,
     burn_key: Fp,
-    fee: U256,
     spend: U256,
-    wallet_addr: Address,
+    burn_extra_commit: U256,
     prover: Address,
     input_path: impl AsRef<Path>,
     proof: EIP1186AccountProofResponse,
@@ -153,9 +145,8 @@ pub async fn generate_input_file(
         proof,
         header_bytes,
         burn_key,
-        fee,
         spend,
-        wallet_addr,
+        burn_extra_commit,
         prover,
     )?
     .to_string();
@@ -201,9 +192,8 @@ pub async fn build_and_prove_burn_logic(
     params_dir: &Path,
     header_bytes: Vec<u8>,
     burn_key: Fp,
-    fee: U256,
     spend: U256,
-    wallet_addr: Address,
+    burn_extra_commit: U256,
     prover: Address,
     input_json_path: &str,
     witness_path: &str,
@@ -213,9 +203,8 @@ pub async fn build_and_prove_burn_logic(
     generate_input_file(
         header_bytes,
         burn_key,
-        fee,
         spend,
-        wallet_addr,
+        burn_extra_commit,
         prover,
         input_json_path,
         proof,
@@ -289,9 +278,8 @@ pub fn input_file(
     proof: EIP1186AccountProofResponse,
     header_bytes: Vec<u8>,
     burn_key: Fp,
-    fee: U256,
     spend: U256,
-    receiver: Address,
+    burn_extra_commit: U256,
     prover: Address,
 ) -> Result<serde_json::Value, anyhow::Error> {
     let max_layers = 16;
@@ -333,19 +321,18 @@ pub fn input_file(
         U256::from_be_slice(keccak256(prover.as_slice()).as_slice()) >> U256::from(8);
 
     Ok(json!({
-        "balance": proof.balance.to_string(),
+        "actualBalance": proof.balance.to_string(),
+        "intendedBalance": proof.balance.to_string(),
         "numLayers": proof.account_proof.len(),
         "layerLens": layer_bits_lens,
         "layers": layers,
         "blockHeader": extended_header,
         "blockHeaderLen": header_bytes.len(),
-        "receiverAddress": U256::from_be_slice(receiver.as_slice()).to_string(),
         "numLeafAddressNibbles": num_addr_hash_nibbles.to_string(),
         "burnKey": U256::from_le_bytes(burn_key.to_repr().0).to_string(),
-        "broadcasterFeeAmount": fee.to_string(),
         "revealAmount": spend.to_string(),
+        "burnExtraCommitment": burn_extra_commit.to_string(),
         "byteSecurityRelax": 0,
-        "proverFeeAmount": 0,
-        "_extraCommitment": extra_commitment.to_string()
+        "_proofExtraCommitment": extra_commitment.to_string()
     }))
 }
