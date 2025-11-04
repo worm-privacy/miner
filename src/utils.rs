@@ -73,6 +73,7 @@ pub fn generate_burn_extra_commit(
     broadcaster_fee: U256,
 ) -> U256 {
     let extra_commit_preimage = (broadcaster_fee, prover_fee, receiver).abi_encode_packed();
+    println!("{:?}", extra_commit_preimage);
     U256::from_be_slice(keccak256(extra_commit_preimage.as_slice()).as_slice()) >> U256::from(8)
 }
 
@@ -98,14 +99,13 @@ pub fn generate_burn_address(
 pub fn compute_remaining_coin(
     burn_key: Fp,
     amount: U256,
-    fee: U256,
     spend: U256,
 ) -> Result<(Fp, U256), anyhow::Error> {
-    if fee + spend > amount {
-        return Err(anyhow!("Sum of fee + spend must be <= amount"));
+    if spend > amount {
+        return Err(anyhow!("Spend amount must be <= amount"));
     }
     let c = poseidon_coin_prefix();
-    let rem_fp = Fp::from_repr(FpRepr((amount - fee - spend).to_le_bytes::<32>())).unwrap();
+    let rem_fp = Fp::from_repr(FpRepr((amount - spend).to_le_bytes::<32>())).unwrap();
     let rem_coin = poseidon3(c, burn_key, rem_fp);
     let rem_u256 = U256::from_le_bytes(rem_coin.to_repr().0);
     Ok((rem_fp, rem_u256))

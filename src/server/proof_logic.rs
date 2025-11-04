@@ -22,8 +22,9 @@ fn derive_burn_and_nullifier_from_input(
 ) -> Result<(Address, Fp, U256, U256, U256, Address, Fp, U256, U256)> {
     let wallet_addr = Address::from_str(input.wallet_address.trim())
         .map_err(|e| anyhow!("Invalid wallet address: {}", e))?;
-
-    let fee = parse_ether(&input.fee)?;
+    println!("{:?}", input);
+    let broadcaster_fee = parse_ether(&input.broadcaster_fee)?;
+    let prover_fee = parse_ether(&input.prover_fee)?;
     let spend = parse_ether(&input.spend)?;
     let amount = parse_ether(&input.amount)?;
 
@@ -34,17 +35,18 @@ fn derive_burn_and_nullifier_from_input(
         burn_const,
         burn_key_fp,
         wallet_addr,
-        U256::ZERO,
-        fee,
+        prover_fee,
+        broadcaster_fee,
         spend,
     );
+    println!("Extra commit: {}", extra_commit.to_string());
 
     let (nullifier_fp, nullifier_u256) = compute_nullifier(burn_key_fp);
 
     Ok((
         wallet_addr,
         burn_key_fp,
-        fee,
+        broadcaster_fee,
         spend,
         amount,
         burn_addr,
@@ -128,8 +130,7 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
         return Err(anyhow!("No ETH present in the burn address"));
     }
 
-    let (_remaining_fp, remaining_coin_u256) =
-        compute_remaining_coin(burn_key_fp, amount, fee, spend)?;
+    let (_remaining_fp, remaining_coin_u256) = compute_remaining_coin(burn_key_fp, amount, spend)?;
 
     let params_dir = homedir::my_home()?
         .ok_or(anyhow!("Can't find home directory"))?

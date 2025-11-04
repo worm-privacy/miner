@@ -246,7 +246,7 @@ impl CommonOpt {
 
         // 4) remaining coin (both fp and u256)
         let (remaining_coin_val_fp, remaining_coin_u256) =
-            compute_remaining_coin(burn_key, amount, fee, spend)?;
+            compute_remaining_coin(burn_key, amount, spend)?;
 
         Ok((
             burn_key,
@@ -399,7 +399,7 @@ impl CommonOpt {
         }
 
         let (_remaining_fp, remaining_coin_u256) =
-            compute_remaining_coin(burn_key, balance, fee, spend)?;
+            compute_remaining_coin(burn_key, balance, spend)?;
         Ok((_remaining_fp, remaining_coin_u256))
     }
 
@@ -418,7 +418,7 @@ impl CommonOpt {
         let (_previous_fp, previous_coin_u256) = compute_previous_coin(burn_key, original_amount)?;
 
         let (_remaining_fp, remaining_coin_u256) =
-            compute_remaining_coin(burn_key, original_amount, fee, out_amount)?;
+            compute_remaining_coin(burn_key, original_amount, out_amount)?;
 
         Ok((previous_coin_u256, _remaining_fp, remaining_coin_u256))
     }

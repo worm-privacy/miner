@@ -16,7 +16,8 @@ pub struct JobResponse {
 pub struct ProofInput {
     pub network: String,
     pub amount: String,
-    pub fee: String,
+    pub broadcaster_fee: String,
+    pub prover_fee: String,
     pub spend: String,
     pub burn_key: String,
     pub wallet_address: String,
