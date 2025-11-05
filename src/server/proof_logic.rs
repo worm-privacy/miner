@@ -19,7 +19,7 @@ use std::str::FromStr;
 
 fn derive_burn_and_nullifier_from_input(
     input: &ProofInput,
-) -> Result<(Address, Fp, U256, U256, U256, Address, Fp, U256, U256)> {
+) -> Result<(Address, Fp, U256, U256, U256, U256, Address, Fp, U256, U256)> {
     let wallet_addr = Address::from_str(input.wallet_address.trim())
         .map_err(|e| anyhow!("Invalid wallet address: {}", e))?;
     println!("{:?}", input);
@@ -46,6 +46,7 @@ fn derive_burn_and_nullifier_from_input(
     Ok((
         wallet_addr,
         burn_key_fp,
+        prover_fee,
         broadcaster_fee,
         spend,
         amount,
@@ -112,7 +113,8 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
     let (
         wallet_addr,
         burn_key_fp,
-        fee,
+        prover_fee,
+        broadcaster_fee,
         spend,
         amount,
         burn_addr,
@@ -156,8 +158,8 @@ pub async fn compute_proof(input: ProofInput) -> Result<ProofOutput> {
         block_number,
         nullifier_u256: nullifier_u256.to_string(),
         remaining_coin: remaining_coin_u256.to_string(),
-        broadcaster_fee: fee.to_string(),
-        prover_fee: "0".to_string(),
+        broadcaster_fee: broadcaster_fee.to_string(),
+        prover_fee: prover_fee.to_string(),
         prover: wallet_addr.to_string(), // TODO: prover
         reveal_amount: spend.to_string(),
         wallet_address: input.wallet_address,
