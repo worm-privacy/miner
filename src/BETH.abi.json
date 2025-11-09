@@ -2,12 +2,36 @@
     "abi": [
         {
             "type": "constructor",
-            "inputs": [],
+            "inputs": [
+                {
+                    "name": "_proofOfBurnVerifier",
+                    "type": "address",
+                    "internalType": "contract IVerifier"
+                },
+                {
+                    "name": "_spendVerifier",
+                    "type": "address",
+                    "internalType": "contract IVerifier"
+                }
+            ],
             "stateMutability": "nonpayable"
         },
         {
             "type": "function",
             "name": "MINT_CAP",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "POOL_SHARE_INV",
             "inputs": [],
             "outputs": [
                 {
@@ -119,6 +143,19 @@
         },
         {
             "type": "function",
+            "name": "initRewardPool",
+            "inputs": [
+                {
+                    "name": "_rewardPool",
+                    "type": "address",
+                    "internalType": "contract IRewardPool"
+                }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
             "name": "mintCoin",
             "inputs": [
                 {
@@ -175,6 +212,16 @@
                     "name": "_prover",
                     "type": "address",
                     "internalType": "address"
+                },
+                {
+                    "name": "_receiverPostMintHook",
+                    "type": "bytes",
+                    "internalType": "bytes"
+                },
+                {
+                    "name": "_broadcasterFeePostMintHook",
+                    "type": "bytes",
+                    "internalType": "bytes"
                 }
             ],
             "outputs": [],
@@ -220,7 +267,7 @@
                 {
                     "name": "",
                     "type": "address",
-                    "internalType": "contract ProofOfBurnVerifier"
+                    "internalType": "contract IVerifier"
                 }
             ],
             "stateMutability": "view"
@@ -240,6 +287,19 @@
                     "name": "",
                     "type": "uint256",
                     "internalType": "uint256"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "rewardPool",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "address",
+                    "internalType": "contract IRewardPool"
                 }
             ],
             "stateMutability": "view"
@@ -269,7 +329,7 @@
                     "internalType": "uint256"
                 },
                 {
-                    "name": "_amount",
+                    "name": "_revealedAmount",
                     "type": "uint256",
                     "internalType": "uint256"
                 },
@@ -300,7 +360,7 @@
                 {
                     "name": "",
                     "type": "address",
-                    "internalType": "contract SpendVerifier"
+                    "internalType": "contract IVerifier"
                 }
             ],
             "stateMutability": "view"
@@ -405,6 +465,19 @@
                     "type": "uint256",
                     "indexed": false,
                     "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "HookFailure",
+            "inputs": [
+                {
+                    "name": "returnData",
+                    "type": "bytes",
+                    "indexed": false,
+                    "internalType": "bytes"
                 }
             ],
             "anonymous": false
@@ -519,6 +592,11 @@
                     "internalType": "address"
                 }
             ]
+        },
+        {
+            "type": "error",
+            "name": "ReentrancyGuardReentrantCall",
+            "inputs": []
         }
     ]
 }
