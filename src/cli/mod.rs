@@ -16,6 +16,7 @@ use crate::utils::{
     compute_nullifier, compute_previous_coin, compute_remaining_coin, fetch_block_and_header_bytes,
     find_burn_key, generate_burn_address, get_account_proof,
 };
+use alloy::primitives::Bytes;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{
     hex::ToHexExt,
@@ -127,6 +128,8 @@ impl CommonOpt {
                 rt.wallet_address,
                 U256::ZERO,
                 rt.wallet_address,
+                Bytes::new(),
+                Bytes::new(),
             )
             .send()
             .await?

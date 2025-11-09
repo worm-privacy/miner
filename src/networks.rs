@@ -16,7 +16,7 @@ lazy_static! {
                 "anvil".into(),
                 Network {
                     rpc: "http://127.0.0.1:8545".parse().unwrap(),
-                    beth: address!("0x5b1869D9A4C187F2EAa108f3062412ecf0526b24"),
+                    beth: address!("0xCfEB869F69431e42cdB54A4F4f105C19C080A601"),
                     worm: address!("0x254dffcd3277C0b1660F6d42EFbB754edaBAbC2B"),
                 },
             ),
