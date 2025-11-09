@@ -7,6 +7,8 @@ use crate::utils::{
     build_and_prove_burn_logic, compute_nullifier, compute_remaining_coin,
     fetch_block_and_header_bytes, get_account_proof,
 };
+use alloy::hex::FromHex;
+use alloy::primitives::Bytes;
 use alloy::{
     primitives::{Address, U256, utils::parse_ether},
     providers::{Provider, ProviderBuilder},
@@ -38,6 +40,7 @@ fn derive_burn_and_nullifier_from_input(
         prover_fee,
         broadcaster_fee,
         spend,
+        Bytes::from_hex(input.receiver_hook.clone())?,
     );
     println!("Extra commit: {}", extra_commit.to_string());
 

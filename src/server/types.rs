@@ -23,6 +23,7 @@ pub struct ProofInput {
     pub wallet_address: String,
     pub proof: Option<EIP1186AccountProofResponse>,
     pub block_number: Option<u64>,
+    pub receiver_hook: String,
 }
 
 #[derive(Serialize, Debug, Clone)]

@@ -5,7 +5,6 @@ mod info;
 mod ls;
 mod mine;
 mod participate;
-mod recover;
 mod spend;
 mod utils;
 use crate::cli::utils::{append_new_entry, burn_file, coins_file, init_coins_file, next_id};
@@ -16,8 +15,10 @@ use crate::utils::{
     compute_nullifier, compute_previous_coin, compute_remaining_coin, fetch_block_and_header_bytes,
     find_burn_key, generate_burn_address, get_account_proof,
 };
-use alloy::primitives::Bytes;
+use alloy::consensus::Receipt;
+use alloy::primitives::{Bytes, U160, address};
 use alloy::signers::local::PrivateKeySigner;
+use alloy::sol_types::{SolCall, SolValue};
 use alloy::{
     hex::ToHexExt,
     network::TransactionBuilder,
@@ -54,6 +55,51 @@ pub struct RuntimeContext<P: Provider> {
     pub network: Network,
     pub wallet_address: Address,
     pub provider: P,
+}
+
+use alloy::dyn_abi::DynSolValue;
+use alloy::primitives::I256;
+use alloy::{hex, sol};
+
+sol! {
+    interface IUniswapV3Pool {
+        /// swap function
+        function swap(
+            address recipient,
+            bool zeroForOne,
+            int256 amountSpecified,
+            uint160 sqrtPriceLimitX96,
+            bytes calldata data
+        ) external returns (int256 amount0, int256 amount1);
+    }
+}
+
+/// Generate calldata for Uniswap V3 pool swap (BETH -> ETH)
+fn get_swap_calldata(amount_in: U256, recipient: Address) -> Vec<u8> {
+    let zero_for_one = true;
+    let amount_specified = I256::from_raw(amount_in);
+
+    let sqrt_price_limit_x96 = if zero_for_one {
+        U160::from_str_radix("4295128741", 10).unwrap()
+    } else {
+        U160::from_str_radix("1461446703485210103287273052203988822378723970340", 10).unwrap()
+    };
+    let data = Vec::new();
+    let swap_call = IUniswapV3Pool::swapCall {
+        recipient,
+        zeroForOne: zero_for_one,
+        amountSpecified: amount_specified,
+        sqrtPriceLimitX96: sqrt_price_limit_x96,
+        data: data.into(),
+    }
+    .abi_encode();
+
+    (
+        address!("0x646b5eB499411390448b5e21838aCB8B2FF548dA"),
+        amount_in,
+        swap_call,
+    )
+        .abi_encode_params()
 }
 
 impl CommonOpt {
@@ -97,6 +143,7 @@ impl CommonOpt {
         remaining_coin: U256,
         fee: U256,
         spend: U256,
+        swap_calldata: Bytes,
     ) -> Result<()> {
         let rt = self.setup().await?; // get provider, wallet, network from self
         println!("Broadcasting mint transaction...");
@@ -105,7 +152,7 @@ impl CommonOpt {
         let beth = BETH::new(net.beth, rt.provider);
 
         // call the zk-proof mintCoin(...) method
-        let receipt = beth
+        let pending_tx = beth
             .mintCoin(
                 // pi_a
                 [proof.proof.pi_a[0], proof.proof.pi_a[1]],
@@ -128,19 +175,39 @@ impl CommonOpt {
                 rt.wallet_address,
                 U256::ZERO,
                 rt.wallet_address,
-                Bytes::new(),
+                swap_calldata,
                 Bytes::new(),
             )
             .send()
-            .await?
-            .get_receipt()
-            .await?;
+            .await;
+        match pending_tx {
+            Ok(pending) => {
+                // transaction mined successfully
+                let receipt = pending.get_receipt().await?;
+                if receipt.status() {
+                    println!("Success!");
+                } else {
+                    println!("Transaction failed!");
+                }
+            }
+            Err(err) => {
+                // transaction reverted, err may contain revert data
+                if let Some(revert_bytes) = err.as_revert_data() {
+                    // revert_bytes: Vec<u8> — ABI encoded
+                    println!("Revert data (raw): 0x{}", hex::encode(revert_bytes.clone()));
 
-        if receipt.status() {
-            println!("Success!");
-        } else {
-            println!("Transaction failed!");
+                    // decode revert reason as string
+                    if let Ok(reason) =
+                        ethers::abi::decode(&[ethers::abi::ParamType::String], &revert_bytes)
+                    {
+                        println!("Revert reason: {}", reason[0].to_string());
+                    }
+                } else {
+                    println!("Transaction failed without revert data: {:?}", err);
+                }
+            }
         }
+
         Ok(())
     }
     pub async fn broadcast_spend(
@@ -211,6 +278,7 @@ impl CommonOpt {
         amount: U256,
         fee: U256,
         spend: U256,
+        receiver_hook: Bytes,
     ) -> Result<(Fp, Address, Fp, U256, Fp, U256, U256)> {
         let rt = self.setup().await?;
 
@@ -225,7 +293,8 @@ impl CommonOpt {
 
         // 1) burn_key
         println!("Generating a burn-key...");
-        let extra_commit = generate_burn_extra_commit(rt.wallet_address, U256::ZERO, fee);
+        let extra_commit =
+            generate_burn_extra_commit(rt.wallet_address, U256::ZERO, fee, receiver_hook.clone());
         let burn_key = find_burn_key(2, extra_commit, spend);
         println!("Your burn_key: {:?}", burn_key);
         println!(
@@ -242,6 +311,7 @@ impl CommonOpt {
             U256::ZERO,
             fee,
             spend,
+            receiver_hook.clone(),
         );
 
         // 3) nullifier (Fp only needed by caller)
@@ -267,6 +337,7 @@ impl CommonOpt {
         burn_key: Fp,
         fee: U256,
         reveal: U256,
+        receiver_hook: Bytes,
     ) -> anyhow::Result<(alloy::primitives::Address, Fp)> {
         let rt = self.setup().await?; // wallet addr + provider + network
         let burn_addr_prefix = crate::constants::poseidon_burn_address_prefix();
@@ -278,6 +349,7 @@ impl CommonOpt {
             U256::ZERO,
             fee,
             reveal,
+            receiver_hook,
         );
         let (nullifier_fp, _nullifier_u256) = compute_nullifier(burn_key);
         Ok((burn_addr, nullifier_fp))
@@ -521,5 +593,4 @@ pub use ls::LsCommand;
 pub use ls::LsOpt;
 pub use mine::MineOpt;
 pub use participate::ParticipateOpt;
-pub use recover::RecoverOpt;
 pub use spend::SpendOpt;
