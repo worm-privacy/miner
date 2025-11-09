@@ -1,5 +1,5 @@
 # ========= Stage 1: Build rapidsnark =========
-FROM debian:bookworm-slim AS rapidsnark-builder
+FROM --platform=linux/amd64 debian:bookworm-slim AS rapidsnark-builder
 WORKDIR /src
 
 # Install build dependencies for rapidsnark
@@ -43,7 +43,7 @@ RUN git clone https://github.com/worm-privacy/witness && \
     make all
 
 # ========= Stage 3: Build Rust worm-miner =========
-FROM rustlang/rust:nightly-bookworm AS rust-builder
+FROM --platform=linux/amd64 rustlang/rust:nightly-bookworm AS rust-builder
 WORKDIR /src
 
 # Install additional dependencies for Rust build
@@ -95,7 +95,7 @@ ENV CARGO_UNSTABLE_EDITION2024=true
 RUN cargo +nightly build --release
 
 # ========= Stage 4: Final runtime image =========
-FROM debian:bookworm-slim
+FROM --platform=linux/amd64 debian:bookworm-slim
 WORKDIR /app
 
 # Runtime dependencies
