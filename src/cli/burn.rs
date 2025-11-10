@@ -24,12 +24,11 @@ impl BurnOpt {
         let fee = parse_ether(&self.fee)?;
         let spend = parse_ether(&self.spend)?;
 
-        let receiver_hook = get_swap_calldata(
-            parse_ether("0.0001").unwrap(),
-            self.common_opt.private_key.address(),
-        );
-
-        println!("{:?}", receiver_hook);
+        // let receiver_hook = get_swap_calldata(
+        //     parse_ether("0.0001").unwrap(),
+        //     self.common_opt.private_key.address(),
+        // );
+        let receiver_hook = Vec::new();
 
         let (
             burn_key,

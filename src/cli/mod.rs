@@ -76,7 +76,7 @@ sol! {
 
 /// Generate calldata for Uniswap V3 pool swap (BETH -> ETH)
 fn get_swap_calldata(amount_in: U256, recipient: Address) -> Vec<u8> {
-    let zero_for_one = true;
+    let zero_for_one = false;
     let amount_specified = I256::from_raw(amount_in);
 
     let sqrt_price_limit_x96 = if zero_for_one {
