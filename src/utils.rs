@@ -1,4 +1,5 @@
 use crate::fp::Fp;
+use alloy::primitives::Bytes;
 use alloy::rpc::types::BlockNumberOrTag;
 use alloy::sol_types::SolValue;
 use alloy::{
@@ -71,9 +72,10 @@ pub fn generate_burn_extra_commit(
     receiver: Address,
     prover_fee: U256,
     broadcaster_fee: U256,
+    receiver_hook: Bytes,
 ) -> U256 {
-    let extra_commit_preimage = (broadcaster_fee, prover_fee, receiver).abi_encode_packed();
-    println!("{:?}", extra_commit_preimage);
+    let extra_commit_preimage =
+        (broadcaster_fee, prover_fee, receiver, receiver_hook).abi_encode_packed();
     U256::from_be_slice(keccak256(extra_commit_preimage.as_slice()).as_slice()) >> U256::from(8)
 }
 
@@ -84,10 +86,12 @@ pub fn generate_burn_address(
     prover_fee: U256,
     broadcaster_fee: U256,
     reveal: U256,
+    receiver_hook: Bytes,
 ) -> (Address, U256) {
     let reveal_be: [u8; 32] = reveal.to_be_bytes();
     let reveal_fp = Fp::from_be_bytes(&reveal_be);
-    let extra_commitment = generate_burn_extra_commit(receiver, prover_fee, broadcaster_fee);
+    let extra_commitment =
+        generate_burn_extra_commit(receiver, prover_fee, broadcaster_fee, receiver_hook);
     let extra_commitment_be: [u8; 32] = extra_commitment.to_be_bytes();
     let extra_commitment_fp = Fp::from_be_bytes(&extra_commitment_be);
     let hash = poseidon::poseidon4(burn_addr_constant, burn_key, reveal_fp, extra_commitment_fp);

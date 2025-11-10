@@ -1,8 +1,6 @@
 mod fp;
 mod poseidon;
 
-use cli::RecoverOpt;
-
 use std::path::PathBuf;
 use structopt::StructOpt;
 pub mod cli;
@@ -34,7 +32,6 @@ enum MinerOpt {
     GenerateWitness(GenerateWitnessOpt),
     Burn(BurnOpt),
     Mine(MineOpt),
-    Recover(RecoverOpt),
     Server,
 }
 
@@ -67,7 +64,6 @@ impl MinerOpt {
                 Ok(())
             }
 
-            MinerOpt::Recover(cmd) => cmd.run(params_dir).await,
             MinerOpt::Server => {
                 println!("🚀 Starting server...");
                 run_server().await

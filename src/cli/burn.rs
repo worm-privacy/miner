@@ -1,5 +1,5 @@
 use super::CommonOpt;
-use crate::cli::utils::check_required_files;
+use crate::cli::{get_swap_calldata, utils::check_required_files};
 use alloy::primitives::utils::parse_ether;
 use anyhow::Result;
 use structopt::StructOpt;
@@ -24,6 +24,12 @@ impl BurnOpt {
         let fee = parse_ether(&self.fee)?;
         let spend = parse_ether(&self.spend)?;
 
+        // let receiver_hook = get_swap_calldata(
+        //     parse_ether("0.0001").unwrap(),
+        //     self.common_opt.private_key.address(),
+        // );
+        let receiver_hook = Vec::new();
+
         let (
             burn_key,
             burn_addr,
@@ -32,7 +38,10 @@ impl BurnOpt {
             remaining_coin_val,
             remaining_coin_u256,
             burn_extra_commit,
-        ) = self.common_opt.prepare_inputs(amount, fee, spend).await?;
+        ) = self
+            .common_opt
+            .prepare_inputs(amount, fee, spend, receiver_hook.clone().into())
+            .await?;
 
         let (_tx_hash, _ok) = self.common_opt.send_burn_tx(burn_addr, amount).await?;
         self.common_opt.persist_burn_data(
@@ -65,6 +74,7 @@ impl BurnOpt {
                 remaining_coin_u256,
                 fee,
                 spend,
+                receiver_hook.into(),
             )
             .await?;
 
