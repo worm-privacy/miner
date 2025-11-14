@@ -5,11 +5,13 @@ mod info;
 mod ls;
 mod mine;
 mod participate;
+mod recover;
 mod spend;
 mod utils;
 use crate::cli::utils::{append_new_entry, burn_file, coins_file, init_coins_file, next_id};
 use crate::constants::poseidon_burn_address_prefix;
 use crate::fp::Fp;
+pub use recover::RecoverOpt;
 use crate::utils::{RapidsnarkOutput, build_and_prove_burn_logic, generate_burn_extra_commit};
 use crate::utils::{
     compute_nullifier, compute_previous_coin, compute_remaining_coin, fetch_block_and_header_bytes,
@@ -338,7 +340,7 @@ impl CommonOpt {
         fee: U256,
         reveal: U256,
         receiver_hook: Bytes,
-    ) -> anyhow::Result<(alloy::primitives::Address, Fp)> {
+    ) -> anyhow::Result<(alloy::primitives::Address, Fp, U256)> {
         let rt = self.setup().await?; // wallet addr + provider + network
         let burn_addr_prefix = crate::constants::poseidon_burn_address_prefix();
 
@@ -352,7 +354,7 @@ impl CommonOpt {
             receiver_hook,
         );
         let (nullifier_fp, _nullifier_u256) = compute_nullifier(burn_key);
-        Ok((burn_addr, nullifier_fp))
+        Ok((burn_addr, nullifier_fp, _burn_extra_commit))
     }
 
     /// 2) Send ETH to burn address & check the receipt
